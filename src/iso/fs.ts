@@ -1,6 +1,6 @@
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/emulation/constants.js';
-import { resolve } from '@zenfs/core/path';
+import { resolve } from '@zenfs/core/emulation/path.js';
 import { Errno, ErrnoError } from '@zenfs/core/error.js';
 import { NoSyncFile, isWriteable } from '@zenfs/core/file.js';
 import { FileSystem, type FileSystemMetadata } from '@zenfs/core/filesystem.js';

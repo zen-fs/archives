@@ -1,7 +1,7 @@
 import { NoSyncFile, Stats, isWriteable } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { S_IFDIR } from '@zenfs/core/emulation/constants.js';
-import { parse } from '@zenfs/core/path';
+import { parse } from '@zenfs/core/emulation/path.js';
 import { Errno, ErrnoError } from '@zenfs/core/error.js';
 import { FileSystem, type FileSystemMetadata } from '@zenfs/core/filesystem.js';
 import { FileEntry, Header } from './zip.js';
