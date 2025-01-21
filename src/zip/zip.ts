@@ -1,4 +1,4 @@
-import { S_IFDIR, S_IFREG } from '@zenfs/core/emulation/constants.js';
+import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
 import { Errno, ErrnoError } from '@zenfs/core/error.js';
 import { Stats } from '@zenfs/core/stats.js';
 import { deserialize, sizeof, struct, types as t } from 'utilium';
