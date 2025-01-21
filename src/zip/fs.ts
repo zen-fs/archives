@@ -1,12 +1,12 @@
-import { NoSyncFile, Stats, isWriteable } from '@zenfs/core';
+import { LazyFile, Stats, _throw, isWriteable, type File } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { S_IFDIR } from '@zenfs/core/emulation/constants.js';
 import { parse } from '@zenfs/core/emulation/path.js';
 import { Errno, ErrnoError } from '@zenfs/core/error.js';
 import { FileSystem, type FileSystemMetadata } from '@zenfs/core/filesystem.js';
-import { FileEntry, Header } from './zip.js';
-import { Sync } from '@zenfs/core/mixins/sync.js';
 import { Readonly } from '@zenfs/core/mixins/readonly.js';
+import { Sync } from '@zenfs/core/mixins/sync.js';
+import { FileEntry, Header } from './zip.js';
 
 /**
  * Configuration options for a ZipFS file system.
@@ -182,38 +182,37 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 
 		const entry = this.files.get(path);
 
-		if (!entry) {
-			throw ErrnoError.With('ENOENT', path, 'stat');
-		}
+		if (!entry) throw ErrnoError.With('ENOENT', path, 'stat');
 
 		return entry.stats;
 	}
 
-	public openFileSync(path: string, flag: string): NoSyncFile<this> {
-		if (isWriteable(flag)) {
-			// You can't write to files on this file system.
-			throw new ErrnoError(Errno.EPERM, path);
-		}
+	public openFileSync(path: string, flag: string): File {
+		if (isWriteable(flag)) throw new ErrnoError(Errno.EPERM, path);
 
 		const stats = this.statSync(path);
 
-		return new NoSyncFile(this, path, flag, stats, stats.isDirectory() ? stats.fileData : this.files.get(path)?.data);
+		return new LazyFile(this, path, flag, stats);
 	}
 
 	public readdirSync(path: string): string[] {
 		const stats = this.statSync(path);
 
-		if (!stats.isDirectory()) {
-			throw ErrnoError.With('ENOTDIR', path, 'readdir');
-		}
+		if (!stats.isDirectory()) throw ErrnoError.With('ENOTDIR', path, 'readdir');
 
 		const entries = this.directories.get(path);
 
-		if (!entries) {
-			throw ErrnoError.With('ENODATA', path, 'readdir');
-		}
+		if (!entries) throw ErrnoError.With('ENODATA', path, 'readdir');
 
 		return Array.from(entries);
+	}
+
+	public readSync(path: string, buffer: Uint8Array, offset: number, end: number): void {
+		if (this.directories.has(path)) throw ErrnoError.With('EISDIR', path, 'read');
+
+		const { data } = this.files.get(path) ?? _throw(ErrnoError.With('ENOENT', path, 'read'));
+
+		buffer.set(data.subarray(offset, end));
 	}
 }
 

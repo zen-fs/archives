@@ -2,7 +2,8 @@ import type { Backend } from '@zenfs/core/backends/backend.js';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/emulation/constants.js';
 import { resolve } from '@zenfs/core/emulation/path.js';
 import { Errno, ErrnoError } from '@zenfs/core/error.js';
-import { NoSyncFile, isWriteable } from '@zenfs/core/file.js';
+import type { File } from '@zenfs/core/file.js';
+import { LazyFile, isWriteable } from '@zenfs/core/file.js';
 import { FileSystem, type FileSystemMetadata } from '@zenfs/core/filesystem.js';
 import { Readonly, Sync } from '@zenfs/core/mixins/index.js';
 import { Stats } from '@zenfs/core/stats.js';
@@ -96,49 +97,49 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 
 	public statSync(path: string): Stats {
 		const record = this._getDirectoryRecord(path);
-		if (!record) {
-			throw ErrnoError.With('ENOENT', path, 'stat');
-		}
+		if (!record) throw ErrnoError.With('ENOENT', path, 'stat');
+
 		return this._getStats(path, record)!;
 	}
 
-	public openFileSync(path: string, flag: string): NoSyncFile<this> {
-		if (isWriteable(flag)) {
-			// Cannot write to RO file systems.
-			throw new ErrnoError(Errno.EPERM, path);
-		}
+	public openFileSync(path: string, flag: string): File {
+		if (isWriteable(flag)) throw new ErrnoError(Errno.EPERM, path);
 
 		const record = this._getDirectoryRecord(path);
-		if (!record) {
-			throw ErrnoError.With('ENOENT', path, 'openFile');
-		}
+		if (!record) throw ErrnoError.With('ENOENT', path, 'openFile');
 
 		if (record.isSymlink(this.data)) {
 			return this.openFileSync(resolve(path, record.getSymlinkPath(this.data)), flag);
 		}
 
-		if (record.isDirectory(this.data)) {
-			throw ErrnoError.With('EISDIR', path, 'openFile');
-		}
+		if (record.isDirectory(this.data)) throw ErrnoError.With('EISDIR', path, 'openFile');
 
-		const data = record.getFile(this.data);
 		const stats = this._getStats(path, record)!;
 
-		return new NoSyncFile(this, path, flag, stats, new Uint8Array(data));
+		return new LazyFile(this, path, flag, stats);
 	}
 
 	public readdirSync(path: string): string[] {
 		// Check if it exists.
 		const record = this._getDirectoryRecord(path);
-		if (!record) {
-			throw ErrnoError.With('ENOENT', path, 'readdir');
-		}
+		if (!record) throw ErrnoError.With('ENOENT', path, 'readdir');
 
 		if (record.isDirectory(this.data)) {
 			return Array.from(record.getDirectory(this.data).keys());
 		}
 
 		throw ErrnoError.With('ENOTDIR', path, 'readdir');
+	}
+
+	public readSync(path: string, buffer: Uint8Array, offset: number, end: number): void {
+		const record = this._getDirectoryRecord(path);
+		if (!record) throw ErrnoError.With('ENOENT', path, 'openFile');
+
+		if (record.isDirectory(this.data)) {
+			throw ErrnoError.With('EISDIR', path, 'openFile');
+		}
+		const data = record.getFile(this.data);
+		buffer.set(data.subarray(offset, end));
 	}
 
 	private _getDirectoryRecord(path: string): DirectoryRecord | undefined {
