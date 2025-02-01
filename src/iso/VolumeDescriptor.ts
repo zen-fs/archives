@@ -1,5 +1,4 @@
-import { decodeRaw } from '@zenfs/core';
-import { Errno, ErrnoError } from '@zenfs/core/error.js';
+import { decodeRaw, Errno, ErrnoError } from '@zenfs/core';
 import { deserialize, member, struct, types as t } from 'utilium';
 import { DirectoryRecord } from './DirectoryRecord.js';
 import { LongFormDate } from './utils.js';

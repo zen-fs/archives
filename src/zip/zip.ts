@@ -1,6 +1,6 @@
-import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
-import { Errno, ErrnoError } from '@zenfs/core/error.js';
+import { Errno, ErrnoError } from '@zenfs/core';
 import { Stats } from '@zenfs/core/stats.js';
+import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
 import { deserialize, sizeof, struct, types as t } from 'utilium';
 import { CompressionMethod, decompressionMethods } from './compression.js';
 import { msdosDate, safeDecode } from './utils.js';

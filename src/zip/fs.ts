@@ -1,11 +1,10 @@
-import { LazyFile, Stats, _throw, isWriteable, type File } from '@zenfs/core';
+import { Errno, ErrnoError, FileSystem, LazyFile, Stats, isWriteable, type File, type UsageInfo } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
-import { S_IFDIR } from '@zenfs/core/emulation/constants.js';
-import { parse } from '@zenfs/core/emulation/path.js';
-import { Errno, ErrnoError } from '@zenfs/core/error.js';
-import { FileSystem, type FileSystemMetadata } from '@zenfs/core/filesystem.js';
 import { Readonly } from '@zenfs/core/mixins/readonly.js';
 import { Sync } from '@zenfs/core/mixins/sync.js';
+import { S_IFDIR } from '@zenfs/core/vfs/constants.js';
+import { parse } from '@zenfs/core/vfs/path.js';
+import { _throw } from 'utilium';
 import { FileEntry, Header } from './zip.js';
 
 /**
@@ -98,10 +97,10 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 	}
 
 	public constructor(
-		public readonly name: string,
+		public label: string,
 		protected data: ArrayBufferLike
 	) {
-		super();
+		super(0x207a6970, 'zipfs');
 
 		this.eocd = ZipFS.computeEOCD(data);
 		if (this.eocd.disk != this.eocd.entriesDisk) {
@@ -154,12 +153,10 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 		}
 	}
 
-	public metadata(): FileSystemMetadata {
+	public usage(): UsageInfo {
 		return {
-			...super.metadata(),
-			name: ['zip', this.name].filter(e => e).join(':'),
-			readonly: true,
 			totalSpace: this.data.byteLength,
+			freeSpace: 0,
 		};
 	}
 

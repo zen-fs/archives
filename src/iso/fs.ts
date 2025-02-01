@@ -1,12 +1,9 @@
+import { Errno, ErrnoError, FileSystem, isWriteable, LazyFile, type File, type UsageInfo } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
-import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
-import { resolve } from '@zenfs/core/vfs/path.js';
-import { Errno, ErrnoError } from '@zenfs/core/error.js';
-import type { File } from '@zenfs/core/file.js';
-import { LazyFile, isWriteable } from '@zenfs/core/file.js';
-import { FileSystem, type FileSystemMetadata } from '@zenfs/core/filesystem.js';
 import { Readonly, Sync } from '@zenfs/core/mixins/index.js';
 import { Stats } from '@zenfs/core/stats.js';
+import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
+import { resolve } from '@zenfs/core/vfs/path.js';
 import type { DirectoryRecord } from './DirectoryRecord.js';
 import type { PrimaryOrSupplementaryVolumeDescriptor } from './VolumeDescriptor.js';
 import { PrimaryVolumeDescriptor, SupplementaryVolumeDescriptor, VolumeDescriptorType } from './VolumeDescriptor.js';
@@ -47,7 +44,7 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 	 * @param name The name of the ISO (optional; used for debug messages / identification via getName()).
 	 */
 	public constructor({ data, name = '' }: IsoOptions) {
-		super();
+		super(0x2069736f, 'iso9660');
 		this._name = name;
 		this.data = data;
 		// Skip first 16 sectors.
@@ -84,14 +81,13 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 		}
 
 		this._root = this._pvd.rootDirectoryEntry(this.data);
+		this.label = ['iso', this._name, this._pvd?.name, this._root && this._root.hasRockRidge && 'RockRidge'].filter(e => e).join(':');
 	}
 
-	public metadata(): FileSystemMetadata {
+	public usage(): UsageInfo {
 		return {
-			...super.metadata(),
-			name: ['iso', this._name, this._pvd?.name, this._root && this._root.hasRockRidge && 'RockRidge'].filter(e => e).join(':'),
-			readonly: true,
 			totalSpace: this.data.byteLength,
+			freeSpace: 0,
 		};
 	}
 

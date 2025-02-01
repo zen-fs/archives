@@ -40,10 +40,13 @@ jobs:
               run: npm test
 
             - name: Unit tests (common)
-              run: npx zenfs-test --common
+              run: npx zenfs-test -pf --common
 
             - name: Unit tests (Zip)
-              run: npx zenfs-test tests/setup-zip.ts
+              run: npx zenfs-test -pwf tests/setup-zip.ts
 
             - name: Unit tests (Iso)
-              run: npx zenfs-test tests/setup-iso.ts
+              run: npx zenfs-test -pwf tests/setup-iso.ts
+
+            - name: Report test coverage
+              run: npx zenfs-test --report
