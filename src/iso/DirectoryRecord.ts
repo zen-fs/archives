@@ -1,4 +1,4 @@
-import { Errno, ErrnoError } from '@zenfs/core';
+import { Errno, ErrnoError, log } from '@zenfs/core';
 import { deserialize, member, struct, types as t } from 'utilium';
 import { Directory } from './Directory.js';
 import { SLComponentFlags } from './SLComponentRecord.js';
@@ -102,27 +102,23 @@ export class DirectoryRecord {
 	public fileName(isoData: Uint8Array): string {
 		if (this.hasRockRidge) {
 			const fn = this._rockRidgeFilename(isoData);
-			if (fn != null) {
-				return fn;
-			}
+			if (fn != null) return fn;
 		}
 		const ident = this.identifier;
-		if (this.isDirectory(isoData)) {
-			return ident;
-		}
+		if (this.isDirectory(isoData)) return ident;
+
 		// Files:
 		// - MUST have 0x2E (.) separating the name from the extension
 		// - MUST have 0x3B (;) separating the file name and extension from the version
 		// Gets expanded to two-byte char in Unicode directory records.
 		const versionSeparator = ident.indexOf(';');
-		if (versionSeparator === -1) {
-			// Some Joliet filenames lack the version separator, despite the standard specifying that it should be there.
-			return ident;
-		}
-		if (ident[versionSeparator - 1] === '.') {
-			// Empty extension. Do not include '.' in the filename.
-			return ident.slice(0, versionSeparator - 1);
-		}
+
+		// Some Joliet filenames lack the version separator, despite the standard specifying that it should be there.
+		if (versionSeparator === -1) return ident;
+
+		// Empty extension. Do not include '.' in the filename.
+		if (ident[versionSeparator - 1] === '.') return ident.slice(0, versionSeparator - 1);
+
 		// Include up to version separator.
 		return ident.slice(0, versionSeparator);
 	}
@@ -175,26 +171,24 @@ export class DirectoryRecord {
 	}
 
 	public getFile(isoData: Uint8Array): Uint8Array {
-		if (this.isDirectory(isoData)) {
-			throw new Error('Tried to get a File from a directory.');
-		}
-		this._file ||= isoData.slice(this.lba, this.lba + this.dataLength);
+		if (this.isDirectory(isoData)) throw log.err(ErrnoError.With('EISDIR', undefined, 'read'));
+		this._file ??= isoData.slice(this.lba, this.lba + this.dataLength);
 		return this._file;
 	}
 
 	public getDirectory(isoData: Uint8Array): Directory {
-		if (!this.isDirectory(isoData)) {
-			throw new Error('Tried to get a Directory from a file.');
-		}
-		this._dir ||= this._constructDirectory(isoData);
+		if (!this.isDirectory(isoData)) throw log.err(ErrnoError.With('ENOTDIR', undefined, 'read'));
+		this._dir ??= new Directory(this, isoData);
 		return this._dir;
 	}
 
 	public getSUEntries(isoData: Uint8Array): SystemUseEntry[] {
-		if (!this._suEntries) {
-			this._constructSUEntries(isoData);
-		}
-		return this._suEntries!;
+		if (this._suEntries) return this._suEntries;
+		let i = 33 + this.data[32];
+		if (i % 2 === 1) i++; // Skip padding fields.
+		i += this._rockRidgeOffset;
+		this._suEntries = constructSystemUseEntries(this.data, i, BigInt(this.length), isoData);
+		return this._suEntries;
 	}
 
 	protected getString(): string {
@@ -208,33 +202,16 @@ export class DirectoryRecord {
 		return (data: Uint8Array) => this._decoder!.decode(data).toLowerCase();
 	}
 
-	protected _constructDirectory(isoData: Uint8Array): Directory {
-		return new Directory(this, isoData);
-	}
-
 	protected _rockRidgeFilename(isoData: Uint8Array): string | null {
 		const nmEntries = this.getSUEntries(isoData).filter(e => e instanceof NMEntry);
-		if (nmEntries.length === 0 || nmEntries[0].flags & (NMFlags.CURRENT | NMFlags.PARENT)) {
-			return null;
-		}
+		if (!nmEntries.length || nmEntries[0].flags & (NMFlags.CURRENT | NMFlags.PARENT)) return null;
+
 		let str = '';
 		for (const e of nmEntries) {
 			str += e.name(this._decode);
-			if (!(e.flags & NMFlags.CONTINUE)) {
-				break;
-			}
+			if (!(e.flags & NMFlags.CONTINUE)) break;
 		}
 		return str;
-	}
-
-	private _constructSUEntries(isoData: Uint8Array): void {
-		let i = 33 + this.data[32];
-		if (i % 2 === 1) {
-			// Skip padding field.
-			i++;
-		}
-		i += this._rockRidgeOffset;
-		this._suEntries = constructSystemUseEntries(this.data, i, BigInt(this.length), isoData);
 	}
 
 	/**

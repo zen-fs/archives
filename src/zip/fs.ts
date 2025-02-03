@@ -186,10 +186,7 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 
 	public openFileSync(path: string, flag: string): File {
 		if (isWriteable(flag)) throw new ErrnoError(Errno.EPERM, path);
-
-		const stats = this.statSync(path);
-
-		return new LazyFile(this, path, flag, stats);
+		return new LazyFile(this, path, flag, this.statSync(path));
 	}
 
 	public readdirSync(path: string): string[] {

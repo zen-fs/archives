@@ -177,16 +177,16 @@ export const sizeof_FileEntry = 46;
 export class FileEntry<T extends ArrayBufferLike = ArrayBufferLike> {
 	public constructor(
 		protected zipData: ArrayBufferLike,
-		protected _data: T
+		protected _buffer: T
 	) {
-		deserialize(this, _data);
+		deserialize(this, _buffer);
 		// Sanity check.
 		if (this.signature != 0x02014b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: Central directory record has invalid signature: ' + this.signature);
 		}
 
-		this.name = safeDecode(this._data, this.useUTF8, sizeof_FileEntry, this.nameLength).replace(/\\/g, '/');
-		this.comment = safeDecode(this._data, this.useUTF8, sizeof_FileEntry + this.nameLength + this.extraLength, this.commentLength);
+		this.name = safeDecode(this._buffer, this.useUTF8, sizeof_FileEntry, this.nameLength).replace(/\\/g, '/');
+		this.comment = safeDecode(this._buffer, this.useUTF8, sizeof_FileEntry + this.nameLength + this.extraLength, this.commentLength);
 	}
 
 	@t.uint32 public signature!: number;
@@ -329,7 +329,7 @@ export class FileEntry<T extends ArrayBufferLike = ArrayBufferLike> {
 	 */
 	public get extra(): T {
 		const offset = 44 + this.nameLength;
-		return this._data.slice(offset, offset + this.extraLength) as T;
+		return this._buffer.slice(offset, offset + this.extraLength) as T;
 	}
 
 	/**
@@ -366,11 +366,9 @@ export class FileEntry<T extends ArrayBufferLike = ArrayBufferLike> {
 		return !this.isDirectory;
 	}
 
-	/**
-	 * Gets the file data, and decompresses it if needed.
-	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.8
-	 */
-	public get data(): Uint8Array {
+	protected _data?: Uint8Array;
+
+	protected _decompress(): Uint8Array {
 		// Get the local header before we can figure out where the actual compressed data starts.
 		const { compressionMethod, size, name } = new LocalFileHeader(this.zipData.slice(this.headerRelativeOffset));
 		const data = this.zipData.slice(this.headerRelativeOffset + size);
@@ -381,6 +379,15 @@ export class FileEntry<T extends ArrayBufferLike = ArrayBufferLike> {
 			throw new ErrnoError(Errno.EINVAL, `Invalid compression method on file '${name}': ${mname}`);
 		}
 		return decompress(data, this.compressedSize, this.uncompressedSize, this.flag);
+	}
+
+	/**
+	 * Gets the file data, and decompresses it if needed.
+	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.8
+	 */
+	public get data(): Uint8Array {
+		this._data ??= this._decompress();
+		return this._data;
 	}
 
 	public get stats(): Stats {
