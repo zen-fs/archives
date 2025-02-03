@@ -318,7 +318,7 @@ export class FileEntry<T extends ArrayBufferLike = ArrayBufferLike> {
 	 *
 	 * Unfortunately, this isn't true in practice.
 	 * Some Windows zip utilities use a backslash here, but the correct Unix-style path in file headers.
-	 * To avoid seeking all over the file to recover the known-good filenames from file headers, we simply convert '/' to '\' here.
+	 * To avoid seeking all over the file to recover the known-good filenames from file headers, we simply convert '\' to '/' here.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.17
 	 */
 	public readonly name: string;
