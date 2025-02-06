@@ -7,7 +7,7 @@
 		"url": "https://github.com/sponsors/james-pre"
 	},
 	"main": "dist/index.js",
-	"types": "src/index.ts",
+	"types": "dist/index.d.ts",
 	"keywords": [
 		"filesystem",
 		"node",
