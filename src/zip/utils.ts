@@ -162,12 +162,12 @@ export const extendedASCIIChars = [
  * Safely decodes the string from a buffer.
  * @hidden
  */
-export function safeDecode(buffer: ArrayBufferLike | ArrayBufferView, utf8: boolean, start: number, length: number): string {
+export function safeDecode(buffer: Uint8Array, utf8: boolean, start: number, length: number): string {
 	if (length === 0) {
 		return '';
 	}
 
-	const uintArray = new Uint8Array('buffer' in buffer ? buffer.buffer : buffer).slice(start, start + length);
+	const uintArray = buffer.subarray(start, start + length);
 	if (utf8) {
 		return decodeUTF8(uintArray);
 	} else {
