@@ -35,8 +35,8 @@ export enum AttributeCompat {
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.7
  */
 @struct()
-export class LocalFileHeader<T extends ArrayBufferLike = ArrayBufferLike> {
-	public constructor(protected data: T) {
+export class LocalFileHeader {
+	public constructor(protected data: Uint8Array) {
 		deserialize(this, data);
 		if (this.signature !== 0x04034b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: Local file header has invalid signature: ' + this.signature);
@@ -122,9 +122,9 @@ export class LocalFileHeader<T extends ArrayBufferLike = ArrayBufferLike> {
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public get extra(): T {
+	public get extra(): Uint8Array {
 		const start = 30 + this.nameLength;
-		return this.data.slice(start, start + this.extraLength) as T;
+		return this.data.subarray(start, start + this.extraLength);
 	}
 
 	public get size(): number {
@@ -141,12 +141,12 @@ export class LocalFileHeader<T extends ArrayBufferLike = ArrayBufferLike> {
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.11
  */
 @struct()
-export class ExtraDataRecord<T extends ArrayBufferLike = ArrayBufferLike> {
+export class ExtraDataRecord {
 	@t.uint32 public signature!: number;
 
 	@t.uint32 public length!: number;
 
-	public constructor(public readonly data: T) {
+	public constructor(public readonly data: Uint8Array) {
 		deserialize(this, data);
 		if (this.signature != 0x08064b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid archive extra data record signature: ' + this.signature);
@@ -157,8 +157,8 @@ export class ExtraDataRecord<T extends ArrayBufferLike = ArrayBufferLike> {
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public get extraField(): T {
-		return this.data.slice(8, 8 + this.length) as T;
+	public get extraField(): Uint8Array {
+		return this.data.subarray(8, 8 + this.length);
 	}
 }
 
@@ -174,19 +174,16 @@ export const sizeof_FileEntry = 46;
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.12
  */
 @struct()
-export class FileEntry<T extends ArrayBufferLike = ArrayBufferLike> {
-	public constructor(
-		protected zipData: ArrayBufferLike,
-		protected _buffer: T
-	) {
-		deserialize(this, _buffer);
+export class FileEntry {
+	public constructor(protected _data: Uint8Array) {
+		deserialize(this, _data);
 		// Sanity check.
 		if (this.signature != 0x02014b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: Central directory record has invalid signature: ' + this.signature);
 		}
 
-		this.name = safeDecode(this._buffer, this.useUTF8, sizeof_FileEntry, this.nameLength).replace(/\\/g, '/');
-		this.comment = safeDecode(this._buffer, this.useUTF8, sizeof_FileEntry + this.nameLength + this.extraLength, this.commentLength);
+		this.name = safeDecode(this._data, this.useUTF8, sizeof_FileEntry, this.nameLength).replace(/\\/g, '/');
+		this.comment = safeDecode(this._data, this.useUTF8, sizeof_FileEntry + this.nameLength + this.extraLength, this.commentLength);
 	}
 
 	@t.uint32 public signature!: number;
@@ -327,9 +324,9 @@ export class FileEntry<T extends ArrayBufferLike = ArrayBufferLike> {
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public get extra(): T {
+	public get extra(): Uint8Array {
 		const offset = 44 + this.nameLength;
-		return this._buffer.slice(offset, offset + this.extraLength) as T;
+		return this._data.subarray(offset, offset + this.extraLength);
 	}
 
 	/**
@@ -366,12 +363,12 @@ export class FileEntry<T extends ArrayBufferLike = ArrayBufferLike> {
 		return !this.isDirectory;
 	}
 
-	protected _data?: Uint8Array;
+	protected _contents?: Uint8Array;
 
 	protected _decompress(): Uint8Array {
 		// Get the local header before we can figure out where the actual compressed data starts.
-		const { compressionMethod, size, name } = new LocalFileHeader(this.zipData.slice(this.headerRelativeOffset));
-		const data = this.zipData.slice(this.headerRelativeOffset + size);
+		const { compressionMethod, size, name } = new LocalFileHeader(new Uint8Array(this._data.buffer, this.headerRelativeOffset));
+		const data = new Uint8Array(this._data.buffer, this.headerRelativeOffset + size);
 		// Check the compression
 		const decompress = decompressionMethods[compressionMethod];
 		if (typeof decompress != 'function') {
@@ -385,9 +382,17 @@ export class FileEntry<T extends ArrayBufferLike = ArrayBufferLike> {
 	 * Gets the file data, and decompresses it if needed.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.8
 	 */
+	public get contents(): Uint8Array {
+		this._contents ??= this._decompress();
+		return this._contents;
+	}
+
+	/**
+	 * @deprecated Use `contents`
+	 */
 	public get data(): Uint8Array {
-		this._data ??= this._decompress();
-		return this._data;
+		this._contents ??= this._decompress();
+		return this._contents;
 	}
 
 	public get stats(): Stats {
@@ -404,8 +409,8 @@ export class FileEntry<T extends ArrayBufferLike = ArrayBufferLike> {
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.13
  */
 @struct()
-export class DigitalSignature<T extends ArrayBufferLike = ArrayBufferLike> {
-	public constructor(protected data: T) {
+export class DigitalSignature {
+	public constructor(protected data: Uint8Array) {
 		deserialize(this, data);
 		if (this.signature != 0x05054b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid digital signature signature: ' + this.signature);
@@ -416,8 +421,8 @@ export class DigitalSignature<T extends ArrayBufferLike = ArrayBufferLike> {
 
 	@t.uint16 public size!: number;
 
-	public get signatureData(): T {
-		return this.data.slice(6, 6 + this.size) as T;
+	public get signatureData(): Uint8Array {
+		return this.data.subarray(6, 6 + this.size);
 	}
 }
 
@@ -429,7 +434,7 @@ export class DigitalSignature<T extends ArrayBufferLike = ArrayBufferLike> {
  */
 @struct()
 export class Header {
-	public constructor(protected data: ArrayBufferLike) {
+	public constructor(protected data: Uint8Array) {
 		deserialize(this, data);
 		if (this.signature != 0x06054b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: End of central directory record has invalid signature: 0x' + this.signature.toString(16));
@@ -487,4 +492,32 @@ export class Header {
 	public get comment(): string {
 		return safeDecode(this.data, true, 22, this.commentLength);
 	}
+}
+
+/**
+ * Locates the end of central directory record at the end of the file.
+ * Throws an exception if it cannot be found.
+ *
+ * @remarks
+ * Unfortunately, the comment is variable size and up to 64K in size.
+ * We assume that the magic signature does not appear in the comment,
+ * and in the bytes between the comment and the signature.
+ * Other ZIP implementations make this same assumption,
+ * since the alternative is to read thread every entry in the file.
+ *
+ * Offsets in this function are negative (i.e. from the end of the file).
+ *
+ * There is no byte alignment on the comment
+ */
+export function computeEOCD(data: Uint8Array): Header {
+	const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+	const start = 22;
+	const end = Math.min(start + 0xffff, data.byteLength - 1);
+	for (let i = start; i < end; i++) {
+		// Magic number: EOCD Signature
+		if (view.getUint32(data.byteLength - i, true) === 0x6054b50) {
+			return new Header(data.subarray(data.byteLength - i));
+		}
+	}
+	throw new ErrnoError(Errno.EINVAL, 'Invalid ZIP file: Could not locate End of Central Directory signature.');
 }

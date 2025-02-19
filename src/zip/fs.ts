@@ -1,11 +1,12 @@
-import { Errno, ErrnoError, FileSystem, LazyFile, Stats, isWriteable, type File, type UsageInfo } from '@zenfs/core';
+import { Errno, ErrnoError, FileSystem, isWriteable, LazyFile, Stats, type File, type UsageInfo } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { Readonly } from '@zenfs/core/mixins/readonly.js';
 import { Sync } from '@zenfs/core/mixins/sync.js';
 import { S_IFDIR } from '@zenfs/core/vfs/constants.js';
 import { parse } from '@zenfs/core/vfs/path.js';
 import { _throw } from 'utilium';
-import { FileEntry, Header } from './zip.js';
+import type { Header } from './zip.js';
+import { computeEOCD, FileEntry } from './zip.js';
 
 /**
  * Configuration options for a ZipFS file system.
@@ -14,7 +15,7 @@ export interface ZipOptions {
 	/**
 	 * The zip file as a binary buffer.
 	 */
-	data: ArrayBufferLike;
+	data: ArrayBufferLike | ArrayBufferView;
 
 	/**
 	 * The name of the zip file (optional).
@@ -28,7 +29,7 @@ export interface ZipOptions {
 }
 
 /**
- * Zip file-backed filesystem
+ * A file system backend by a zip file.
  * Implemented according to the standard:
  * http://pkware.com/documents/casestudies/APPNOTE.TXT
  *
@@ -39,11 +40,9 @@ export interface ZipOptions {
  * strings. Furthermore, these libraries duplicate functionality already present
  * in ZenFS (e.g. UTF-8 decoding and binary data manipulation).
  *
- * When the filesystem is instantiated, we determine the directory structure
- * of the zip file as quickly as possible. We lazily decompress and check the
- * CRC32 of files. We do not cache decompressed files; if this is a desired
- * feature, it is best implemented as a generic file system wrapper that can
- * cache data from arbitrary file systems.
+ * When the filesystem is instantiated,
+ * we determine the directory structure of the zip file as quickly as possible.
+ * We lazily decompress and check the CRC32 of files.
  *
  * Current limitations:
  * * No encryption.
@@ -62,47 +61,22 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 
 	protected _time = Date.now();
 
-	/**
-	 * Locates the end of central directory record at the end of the file.
-	 * Throws an exception if it cannot be found.
-	 *
-	 * @remarks
-	 * Unfortunately, the comment is variable size and up to 64K in size.
-	 * We assume that the magic signature does not appear in the comment,
-	 * and in the bytes between the comment and the signature.
-	 * Other ZIP implementations make this same assumption,
-	 * since the alternative is to read thread every entry in the file.
-	 *
-	 * Offsets in this function are negative (i.e. from the end of the file).
-	 *
-	 * There is no byte alignment on the comment
-	 */
-	protected static computeEOCD(data: ArrayBufferLike): Header {
-		const view = new DataView(data);
-		const start = 22;
-		const end = Math.min(start + 0xffff, data.byteLength - 1);
-		for (let i = start; i < end; i++) {
-			// Magic number: EOCD Signature
-			if (view.getUint32(data.byteLength - i, true) === 0x6054b50) {
-				return new Header(data.slice(data.byteLength - i));
-			}
-		}
-		throw new ErrnoError(Errno.EINVAL, 'Invalid ZIP file: Could not locate End of Central Directory signature.');
-	}
-
 	public readonly eocd: Header;
 
+	/**
+	 * @deprecated
+	 */
 	public get endOfCentralDirectory(): Header {
 		return this.eocd;
 	}
 
 	public constructor(
 		public label: string,
-		protected data: ArrayBufferLike
+		protected data: Uint8Array
 	) {
 		super(0x207a6970, 'zipfs');
 
-		this.eocd = ZipFS.computeEOCD(data);
+		this.eocd = computeEOCD(data);
 		if (this.eocd.disk != this.eocd.entriesDisk) {
 			throw new ErrnoError(Errno.EINVAL, 'ZipFS does not support spanned zip files.');
 		}
@@ -115,7 +89,7 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 		const cdEnd = ptr + this.eocd.size;
 
 		while (ptr < cdEnd) {
-			const cd = new FileEntry(this.data, this.data.slice(ptr));
+			const cd = new FileEntry(this.data.subarray(ptr));
 			/* 	Paths must be absolute,
 			yet zip file paths are always relative to the zip root.
 			So we prepend '/' and call it a day. */
@@ -204,7 +178,7 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 	public readSync(path: string, buffer: Uint8Array, offset: number, end: number): void {
 		if (this.directories.has(path)) throw ErrnoError.With('EISDIR', path, 'read');
 
-		const { data } = this.files.get(path) ?? _throw(ErrnoError.With('ENOENT', path, 'read'));
+		const { contents: data } = this.files.get(path) ?? _throw(ErrnoError.With('ENOENT', path, 'read'));
 
 		buffer.set(data.subarray(offset, end));
 	}
@@ -218,8 +192,8 @@ const _Zip = {
 			type: 'object',
 			required: true,
 			validator(buff: unknown) {
-				if (!(buff instanceof ArrayBuffer)) {
-					throw new ErrnoError(Errno.EINVAL, 'option must be a ArrayBuffer.');
+				if (!(buff instanceof ArrayBuffer) && !ArrayBuffer.isView(buff)) {
+					throw new ErrnoError(Errno.EINVAL, 'Options is not a valid buffer');
 				}
 			},
 		},
@@ -230,8 +204,8 @@ const _Zip = {
 		return true;
 	},
 
-	create(options: ZipOptions): ZipFS {
-		return new ZipFS(options.name ?? '', options.data);
+	create({ name, data }: ZipOptions): ZipFS {
+		return new ZipFS(name ?? '', ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : new Uint8Array(data));
 	},
 } satisfies Backend<ZipFS, ZipOptions>;
 type _Zip = typeof _Zip;

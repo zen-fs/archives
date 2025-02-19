@@ -22,17 +22,17 @@ export enum CompressionMethod {
 	PPMD = 98,
 }
 
-export type decompress = (data: ArrayBufferLike, compressedSize: number, uncompressedSize: number, flags: number) => Uint8Array;
+export type decompress = (data: Uint8Array, compressedSize: number, uncompressedSize: number, flags: number) => Uint8Array;
 
 /**
  * Maps CompressionMethod to function that decompresses.
  */
 export const decompressionMethods: { [method in CompressionMethod]?: decompress } = {
-	[CompressionMethod.DEFLATE](data, end): Uint8Array {
-		return inflateSync(new Uint8Array(data, 0, end));
+	[CompressionMethod.DEFLATE](data): Uint8Array {
+		return inflateSync(data);
 	},
 
 	[CompressionMethod.STORED](data, compressedSize, uncompressedSize): Uint8Array {
-		return new Uint8Array(data, 0, uncompressedSize);
+		return data.subarray(0, compressedSize);
 	},
 };
