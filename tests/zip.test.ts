@@ -14,22 +14,22 @@ suite('Basic ZIP operations', () => {
 	});
 
 	test('readdir /', () => {
-		assert(fs.readdirSync('/').length == 3);
+		assert.equal(fs.readdirSync('/').length, 3);
 	});
 
 	test('read /one.txt', () => {
-		assert(fs.readFileSync('/one.txt', 'utf8') == '1');
+		assert.equal(fs.readFileSync('/one.txt', 'utf8'), '1');
 	});
 
 	test('read /two.txt', () => {
-		assert(fs.readFileSync('/two.txt', 'utf8') == 'two');
+		assert.equal(fs.readFileSync('/two.txt', 'utf8'), 'two');
 	});
 
 	test('readdir /nested', () => {
-		assert(fs.readdirSync('/nested').length == 1);
+		assert.equal(fs.readdirSync('/nested').length, 1);
 	});
 
 	test('readdir /nested/omg.txt', () => {
-		assert(fs.readFileSync('/nested/omg.txt', 'utf8') == 'This is a nested file!');
+		assert.equal(fs.readFileSync('/nested/omg.txt', 'utf8'), 'This is a nested file!');
 	});
 });
