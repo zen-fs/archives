@@ -61,14 +61,7 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 
 	protected _time = Date.now();
 
-	public readonly eocd: Header;
-
-	/**
-	 * @deprecated
-	 */
-	public get endOfCentralDirectory(): Header {
-		return this.eocd;
-	}
+	protected readonly eocd: Header;
 
 	public constructor(
 		public label: string,
@@ -132,10 +125,6 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 			totalSpace: this.data.byteLength,
 			freeSpace: 0,
 		};
-	}
-
-	public get numberOfCentralDirectoryEntries(): number {
-		return this.files.size;
 	}
 
 	public statSync(path: string): Inode {

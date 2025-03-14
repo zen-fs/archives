@@ -1,4 +1,4 @@
-import { Errno, ErrnoError, FileSystem, Inode, type UsageInfo } from '@zenfs/core';
+import { Errno, ErrnoError, FileSystem, Inode, log, type UsageInfo } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { Readonly, Sync } from '@zenfs/core/mixins/index.js';
 import { resolve } from '@zenfs/core/path.js';
@@ -7,7 +7,6 @@ import { decodeASCII } from 'utilium';
 import type { DirectoryRecord } from './DirectoryRecord.js';
 import { PrimaryVolumeDescriptor, VolumeDescriptorType } from './VolumeDescriptor.js';
 import { PXEntry, TFEntry, TFFlag } from './entries.js';
-import * as log from '@zenfs/core/internal/log.js';
 
 /**
  * Options for IsoFS file system instances.

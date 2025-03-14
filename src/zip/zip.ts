@@ -1,4 +1,4 @@
-import { Errno, ErrnoError, Inode } from '@zenfs/core';
+import { Errno, ErrnoError, Inode, log } from '@zenfs/core';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
 import { _throw, deserialize, memoize, sizeof, struct, types as t } from 'utilium';
 import { CompressionMethod, decompressionMethods } from './compression.js';
@@ -35,7 +35,7 @@ export enum AttributeCompat {
  */
 @struct()
 export class LocalFileHeader {
-	public constructor(protected data: Uint8Array = _throw('Missing data')) {
+	public constructor(protected data: Uint8Array = _throw('Local file header is missing data')) {
 		deserialize(this, data);
 		if (this.signature !== 0x04034b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: Local file header has invalid signature: ' + this.signature);
@@ -145,7 +145,7 @@ export class ExtraDataRecord {
 
 	@t.uint32 public length!: number;
 
-	public constructor(public readonly data: Uint8Array = _throw('Missing data')) {
+	public constructor(public readonly data: Uint8Array = _throw('Archive extra data record is missing data')) {
 		deserialize(this, data);
 		if (this.signature != 0x08064b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid archive extra data record signature: ' + this.signature);
@@ -168,7 +168,7 @@ export class ExtraDataRecord {
  */
 @struct()
 export class FileEntry {
-	public constructor(protected _data: Uint8Array = _throw('Missing data')) {
+	public constructor(protected _data: Uint8Array = _throw('Central directory record is missing data')) {
 		deserialize(this, _data);
 		// Sanity check.
 		if (this.signature != 0x02014b50) {
@@ -365,7 +365,7 @@ export class FileEntry {
 		const decompress = decompressionMethods[compressionMethod];
 		if (typeof decompress != 'function') {
 			const mname: string = compressionMethod in CompressionMethod ? CompressionMethod[compressionMethod] : compressionMethod.toString();
-			throw new ErrnoError(Errno.EINVAL, `Invalid compression method on file '${name}': ${mname}`);
+			throw new ErrnoError(Errno.EINVAL, `Invalid compression method on file "${name}": ${mname}`);
 		}
 		return decompress(data, this.compressedSize, this.uncompressedSize, this.flag);
 	}
@@ -402,7 +402,7 @@ export class FileEntry {
  */
 @struct()
 export class DigitalSignature {
-	public constructor(protected data: Uint8Array = _throw('Missing data')) {
+	public constructor(protected data: Uint8Array = _throw('Digital signature is missing data')) {
 		deserialize(this, data);
 		if (this.signature != 0x05054b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid digital signature signature: ' + this.signature);
@@ -426,7 +426,7 @@ export class DigitalSignature {
  */
 @struct()
 export class Header {
-	public constructor(protected data: Uint8Array = _throw('Missing data')) {
+	public constructor(protected data: Uint8Array = _throw('Header is missing data')) {
 		deserialize(this, data);
 		if (this.signature != 0x06054b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: End of central directory record has invalid signature: 0x' + this.signature.toString(16));
@@ -504,13 +504,12 @@ export class Header {
  */
 export function computeEOCD(data: Uint8Array): Header {
 	const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-	const start = 22;
-	const end = Math.min(start + 0xffff, data.byteLength - 1);
-	for (let i = start; i < end; i++) {
+	for (let offset = data.byteLength - 22; offset > data.byteLength - 0xffff; offset--) {
 		// Magic number: EOCD Signature
-		if (view.getUint32(data.byteLength - i, true) === 0x6054b50) {
-			return new Header(data.subarray(data.byteLength - i));
+		if (view.getUint32(offset, true) === 0x6054b50) {
+			log.debug('zipfs: found End of Central Directory signature at 0x' + offset.toString(16));
+			return new Header(data.subarray(offset));
 		}
 	}
-	throw new ErrnoError(Errno.EINVAL, 'Invalid ZIP file: Could not locate End of Central Directory signature.');
+	throw log.err(new ErrnoError(Errno.EINVAL, 'zipfs: could not locate End of Central Directory signature'));
 }
