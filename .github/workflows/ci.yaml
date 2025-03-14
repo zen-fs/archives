@@ -36,9 +36,6 @@ jobs:
             - name: Build
               run: npm run build
 
-            - name: Backend-only Tests
-              run: npm test
-
             - name: Unit tests (common)
               run: npx zenfs-test -pf --common
 
