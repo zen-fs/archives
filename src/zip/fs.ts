@@ -1,9 +1,9 @@
-import { Errno, ErrnoError, FileSystem, isWriteable, LazyFile, Stats, type File, type UsageInfo } from '@zenfs/core';
+import { Errno, ErrnoError, FileSystem, Inode, type UsageInfo } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { Readonly } from '@zenfs/core/mixins/readonly.js';
 import { Sync } from '@zenfs/core/mixins/sync.js';
 import { S_IFDIR } from '@zenfs/core/vfs/constants.js';
-import { parse } from '@zenfs/core/vfs/path.js';
+import { parse } from '@zenfs/core/path.js';
 import { _throw } from 'utilium';
 import type { Header } from './zip.js';
 import { computeEOCD, FileEntry } from './zip.js';
@@ -138,10 +138,10 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 		return this.files.size;
 	}
 
-	public statSync(path: string): Stats {
+	public statSync(path: string): Inode {
 		// The EOCD/Header does not track directories, so it does not exist in `entries`
 		if (this.directories.has(path)) {
-			return new Stats({
+			return new Inode({
 				mode: 0o555 | S_IFDIR,
 				size: 4096,
 				mtimeMs: this._time,
@@ -155,18 +155,13 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 
 		if (!entry) throw ErrnoError.With('ENOENT', path, 'stat');
 
-		return entry.stats;
-	}
-
-	public openFileSync(path: string, flag: string): File {
-		if (isWriteable(flag)) throw new ErrnoError(Errno.EPERM, path);
-		return new LazyFile(this, path, flag, this.statSync(path));
+		return entry.inode;
 	}
 
 	public readdirSync(path: string): string[] {
-		const stats = this.statSync(path);
+		const inode = this.statSync(path);
 
-		if (!stats.isDirectory()) throw ErrnoError.With('ENOTDIR', path, 'readdir');
+		if (!(inode.mode & S_IFDIR)) throw ErrnoError.With('ENOTDIR', path, 'readdir');
 
 		const entries = this.directories.get(path);
 
@@ -189,13 +184,8 @@ const _Zip = {
 
 	options: {
 		data: {
-			type: 'object',
+			type: [ArrayBuffer, Object.getPrototypeOf(Uint8Array) /* %TypedArray% */],
 			required: true,
-			validator(buff: unknown) {
-				if (!(buff instanceof ArrayBuffer) && !ArrayBuffer.isView(buff)) {
-					throw new ErrnoError(Errno.EINVAL, 'Options is not a valid buffer');
-				}
-			},
 		},
 		name: { type: 'string', required: false },
 	},

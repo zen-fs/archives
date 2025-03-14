@@ -1,11 +1,10 @@
-import { Errno, ErrnoError, FileSystem, isWriteable, LazyFile, type File, type UsageInfo } from '@zenfs/core';
+import { Errno, ErrnoError, FileSystem, Inode, type InodeLike, type UsageInfo } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { Readonly, Sync } from '@zenfs/core/mixins/index.js';
-import { Stats } from '@zenfs/core/stats.js';
+import { resolve } from '@zenfs/core/path.js';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
-import { resolve } from '@zenfs/core/vfs/path.js';
 import type { DirectoryRecord } from './DirectoryRecord.js';
-import type { PrimaryOrSupplementaryVolumeDescriptor } from './VolumeDescriptor.js';
+import type { VolumeDescriptor } from './VolumeDescriptor.js';
 import { PrimaryVolumeDescriptor, SupplementaryVolumeDescriptor, VolumeDescriptorType } from './VolumeDescriptor.js';
 import { PXEntry, TFEntry, TFFlag } from './entries.js';
 
@@ -32,7 +31,7 @@ export interface IsoOptions {
  */
 export class IsoFS extends Readonly(Sync(FileSystem)) {
 	protected data: Uint8Array;
-	private _pvd?: PrimaryOrSupplementaryVolumeDescriptor;
+	private _pvd?: VolumeDescriptor;
 	private _root: DirectoryRecord;
 	private _name: string;
 
@@ -50,7 +49,7 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 		// Skip first 16 sectors.
 		let vdTerminatorFound = false;
 		let i = 16 * 2048;
-		const candidateVDs = new Array<PrimaryOrSupplementaryVolumeDescriptor>();
+		const candidateVDs = new Array<VolumeDescriptor>();
 		while (!vdTerminatorFound && i < data.length) {
 			const slice = this.data.slice(i);
 			switch (slice[0] as VolumeDescriptorType) {
@@ -91,28 +90,11 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 		};
 	}
 
-	public statSync(path: string): Stats {
+	public statSync(path: string): Inode {
 		const record = this._getDirectoryRecord(path);
 		if (!record) throw ErrnoError.With('ENOENT', path, 'stat');
 
-		return this._getStats(path, record)!;
-	}
-
-	public openFileSync(path: string, flag: string): File {
-		if (isWriteable(flag)) throw new ErrnoError(Errno.EPERM, path);
-
-		const record = this._getDirectoryRecord(path);
-		if (!record) throw ErrnoError.With('ENOENT', path, 'openFile');
-
-		if (record.isSymlink(this.data)) {
-			return this.openFileSync(resolve(path, record.getSymlinkPath(this.data)), flag);
-		}
-
-		if (record.isDirectory(this.data)) throw ErrnoError.With('EISDIR', path, 'openFile');
-
-		const stats = this._getStats(path, record)!;
-
-		return new LazyFile(this, path, flag, stats);
+		return this._getInode(path, record)!;
 	}
 
 	public readdirSync(path: string): string[] {
@@ -157,14 +139,14 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 		return dir;
 	}
 
-	private _getStats(path: string, record: DirectoryRecord): Stats | undefined {
+	private _getInode(path: string, record: DirectoryRecord): Inode | undefined {
 		if (record.isSymlink(this.data)) {
 			const newP = resolve(path, record.getSymlinkPath(this.data));
 			const dirRec = this._getDirectoryRecord(newP);
 			if (!dirRec) {
 				return;
 			}
-			return this._getStats(newP, dirRec);
+			return this._getInode(newP, dirRec);
 		}
 
 		let mode = 0o555;
@@ -197,7 +179,7 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 		}
 		// Mask out writeable flags. This is a RO file system.
 		mode &= 0o555;
-		return new Stats({
+		return new Inode({
 			mode: mode | (record.isDirectory(this.data) ? S_IFDIR : S_IFREG),
 			size: record.dataLength,
 			atimeMs,
@@ -215,15 +197,7 @@ const _Iso = {
 	},
 
 	options: {
-		data: {
-			type: 'object',
-			required: true,
-			validator(arg: unknown) {
-				if (!(arg instanceof Uint8Array)) {
-					throw new TypeError('data is not an Uint8Array');
-				}
-			},
-		},
+		data: { type: Uint8Array, required: true },
 	},
 
 	create(options: IsoOptions) {

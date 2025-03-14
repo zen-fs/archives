@@ -1,7 +1,6 @@
-import { Errno, ErrnoError } from '@zenfs/core';
-import { Stats } from '@zenfs/core/stats.js';
+import { Errno, ErrnoError, Inode } from '@zenfs/core';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
-import { deserialize, sizeof, struct, types as t } from 'utilium';
+import { _throw, deserialize, sizeof, struct, types as t } from 'utilium';
 import { CompressionMethod, decompressionMethods } from './compression.js';
 import { msdosDate, safeDecode } from './utils.js';
 
@@ -36,7 +35,7 @@ export enum AttributeCompat {
  */
 @struct()
 export class LocalFileHeader {
-	public constructor(protected data: Uint8Array) {
+	public constructor(protected data: Uint8Array = _throw('Missing data')) {
 		deserialize(this, data);
 		if (this.signature !== 0x04034b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: Local file header has invalid signature: ' + this.signature);
@@ -146,7 +145,7 @@ export class ExtraDataRecord {
 
 	@t.uint32 public length!: number;
 
-	public constructor(public readonly data: Uint8Array) {
+	public constructor(public readonly data: Uint8Array = _throw('Missing data')) {
 		deserialize(this, data);
 		if (this.signature != 0x08064b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid archive extra data record signature: ' + this.signature);
@@ -169,7 +168,7 @@ export class ExtraDataRecord {
  */
 @struct()
 export class FileEntry {
-	public constructor(protected _data: Uint8Array) {
+	public constructor(protected _data: Uint8Array = _throw('Missing data')) {
 		deserialize(this, _data);
 		// Sanity check.
 		if (this.signature != 0x02014b50) {
@@ -389,8 +388,8 @@ export class FileEntry {
 		return this._contents;
 	}
 
-	public get stats(): Stats {
-		return new Stats({
+	public get inode(): Inode {
+		return new Inode({
 			mode: 0o555 | (this.isDirectory ? S_IFDIR : S_IFREG),
 			size: this.uncompressedSize,
 			mtimeMs: this.lastModified.getTime(),
@@ -404,7 +403,7 @@ export class FileEntry {
  */
 @struct()
 export class DigitalSignature {
-	public constructor(protected data: Uint8Array) {
+	public constructor(protected data: Uint8Array = _throw('Missing data')) {
 		deserialize(this, data);
 		if (this.signature != 0x05054b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid digital signature signature: ' + this.signature);
@@ -428,7 +427,7 @@ export class DigitalSignature {
  */
 @struct()
 export class Header {
-	public constructor(protected data: Uint8Array) {
+	public constructor(protected data: Uint8Array = _throw('Missing data')) {
 		deserialize(this, data);
 		if (this.signature != 0x06054b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: End of central directory record has invalid signature: 0x' + this.signature.toString(16));

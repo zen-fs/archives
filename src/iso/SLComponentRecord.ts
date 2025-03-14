@@ -1,4 +1,4 @@
-import { struct, types as t } from 'utilium';
+import { _throw, struct, types as t } from 'utilium';
 
 export const enum SLComponentFlags {
 	CONTINUE = 1,
@@ -9,7 +9,7 @@ export const enum SLComponentFlags {
 
 @struct()
 export class SLComponentRecord {
-	public constructor(protected data: Uint8Array) {}
+	public constructor(protected data: Uint8Array = _throw('Missing data')) {}
 
 	@t.uint8 public flags!: SLComponentFlags;
 

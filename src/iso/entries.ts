@@ -1,5 +1,4 @@
-import { decodeUTF8 } from '@zenfs/core';
-import { deserialize, sizeof, struct, types as t, type Tuple } from 'utilium';
+import { _throw, decodeUTF8, deserialize, sizeof, struct, types as t, type Tuple } from 'utilium';
 import { SLComponentRecord } from './SLComponentRecord.js';
 import { LongFormDate, ShortFormDate } from './utils.js';
 
@@ -33,7 +32,7 @@ export const enum EntrySignature {
 export
 @struct()
 class SystemUseEntry {
-	public constructor(protected data: Uint8Array) {
+	public constructor(protected data: Uint8Array = _throw('Missing data')) {
 		deserialize(this, data);
 	}
 

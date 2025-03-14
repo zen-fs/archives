@@ -6,6 +6,7 @@ import { FileFlags, rockRidgeIdentifier } from './constants.js';
 import type { SystemUseEntry } from './entries.js';
 import { CLEntry, EREntry, NMEntry, NMFlags, RREntry, SLEntry, SPEntry, constructSystemUseEntries } from './entries.js';
 import { ShortFormDate } from './utils.js';
+import { _throw } from 'utilium/misc.js';
 
 @struct()
 export class DirectoryRecord {
@@ -20,11 +21,11 @@ export class DirectoryRecord {
 	_kind?: string;
 
 	public constructor(
-		protected data: Uint8Array,
+		protected data: Uint8Array = _throw('Missing data'),
 		/**
 		 * Offset at which system use entries begin. Set to -1 if not enabled.
 		 */
-		protected _rockRidgeOffset: number
+		protected _rockRidgeOffset: number = _throw('Missing rock ridge offset')
 	) {
 		deserialize(this, data);
 		this._view = new DataView(data.buffer);

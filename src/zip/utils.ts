@@ -1,4 +1,4 @@
-import { decodeUTF8 } from '@zenfs/core/utils.js';
+import { decodeUTF8 } from 'utilium';
 
 /**
  * Converts the input `time` and `date` in MS-DOS format into a `Date`.

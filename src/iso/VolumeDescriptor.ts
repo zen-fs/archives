@@ -1,5 +1,5 @@
-import { decodeRaw, Errno, ErrnoError } from '@zenfs/core';
-import { deserialize, member, struct, types as t } from 'utilium';
+import { Errno, ErrnoError } from '@zenfs/core';
+import { _throw, decodeASCII, deserialize, member, struct, types as t } from 'utilium';
 import { DirectoryRecord } from './DirectoryRecord.js';
 import { LongFormDate } from './utils.js';
 
@@ -13,7 +13,7 @@ export const enum VolumeDescriptorType {
 
 @struct()
 export class VolumeDescriptor {
-	public constructor(protected _data: Uint8Array) {
+	public constructor(protected _data: Uint8Array = _throw('Missing data')) {
 		deserialize(this, _data);
 	}
 
@@ -24,14 +24,6 @@ export class VolumeDescriptor {
 	@t.uint8 public version!: number;
 
 	@t.char(1) protected __padding__7!: number;
-}
-
-@struct()
-export abstract class PrimaryOrSupplementaryVolumeDescriptor extends VolumeDescriptor {
-	public constructor(_data: Uint8Array) {
-		super(_data);
-		deserialize(this, _data);
-	}
 
 	protected _decoder?: TextDecoder;
 
@@ -219,14 +211,15 @@ export abstract class PrimaryOrSupplementaryVolumeDescriptor extends VolumeDescr
 				Volume size: ${this.volumeSpaceSize}`.replaceAll('\t', '');
 	}
 
-	public abstract readonly name: string;
+	// Needs to be implemented by subclasses.
+	declare public readonly name: string;
 }
 
 @struct()
-export class PrimaryVolumeDescriptor extends PrimaryOrSupplementaryVolumeDescriptor {
+export class PrimaryVolumeDescriptor extends VolumeDescriptor {
 	public readonly name = 'ISO9660';
 
-	public constructor(data: Uint8Array) {
+	public constructor(data: Uint8Array = _throw('Missing data')) {
 		super(data);
 		if (this.type !== VolumeDescriptorType.Primary) {
 			throw new ErrnoError(Errno.EIO, 'Invalid primary volume descriptor.');
@@ -235,17 +228,17 @@ export class PrimaryVolumeDescriptor extends PrimaryOrSupplementaryVolumeDescrip
 }
 
 @struct()
-export class SupplementaryVolumeDescriptor extends PrimaryOrSupplementaryVolumeDescriptor {
+export class SupplementaryVolumeDescriptor extends VolumeDescriptor {
 	public readonly name = 'Joliet';
 
-	public constructor(data: Uint8Array) {
+	public constructor(data: Uint8Array = _throw('Missing data')) {
 		super(data);
 		if (this.type !== VolumeDescriptorType.Supplementary) {
 			throw new ErrnoError(Errno.EIO, 'Invalid supplementary volume descriptor.');
 		}
 		// Third character identifies what 'level' of the UCS specification to follow. We ignore it.
 		if (this.escapeSequence[0] !== 37 || this.escapeSequence[1] !== 47 || ![64, 67, 69].includes(this.escapeSequence[2])) {
-			throw new ErrnoError(Errno.EIO, 'Unrecognized escape sequence for SupplementaryVolumeDescriptor: ' + decodeRaw(this.escapeSequence));
+			throw new ErrnoError(Errno.EIO, 'Unrecognized escape sequence for SupplementaryVolumeDescriptor: ' + decodeASCII(this.escapeSequence));
 		}
 	}
 }
