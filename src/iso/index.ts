@@ -1,4 +1,3 @@
-export * from './constants.js';
 export * from './Directory.js';
 export * from './DirectoryRecord.js';
 export * from './entries.js';
