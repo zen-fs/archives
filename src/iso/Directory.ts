@@ -1,47 +1,44 @@
 import { DirectoryRecord } from './DirectoryRecord.js';
-import { FileFlags } from './constants.js';
 import { CLEntry, REEntry } from './entries.js';
+import { FileFlags } from './misc.js';
 
 export class Directory extends Map<string, DirectoryRecord> {
-	public constructor(
-		protected record: DirectoryRecord,
-		isoData: Uint8Array
-	) {
+	public readonly dotEntry: DirectoryRecord;
+
+	public constructor(protected record: DirectoryRecord) {
 		super();
 		let i = record.lba;
 		let limit = i + record.dataLength;
 		if (!(record.fileFlags & FileFlags.Directory)) {
 			// Must have a CL entry.
-			const cl = record.getSUEntries(isoData).find(e => e instanceof CLEntry);
-			if (!cl) {
-				throw new ReferenceError('No CL entry');
-			}
+			const cl = record.suEntries.find(e => e instanceof CLEntry);
+			if (!cl) throw new ReferenceError('No CL entry');
 			i = cl.childDirectoryLba * 2048;
 			limit = Infinity;
 		}
 
+		const data = new Uint8Array(record.buffer!);
+
 		while (i < limit) {
-			const length = isoData[i];
+			const length = data[i];
 			// Zero-padding between sectors.
 			// Could optimize this to seek to nearest-sector upon seeing a 0.
 			if (!length) {
 				i++;
 				continue;
 			}
-			const record = new DirectoryRecord(isoData.slice(i), this.record.rockRidgeOffset);
-			const fileName = record.fileName(isoData);
+			const _record = new DirectoryRecord(record.buffer, i, record.rockRidgeOffset);
+			const fileName = _record.fileName;
 			// Skip '.' and '..' entries.
-			if (fileName !== '\u0000' && fileName !== '\u0001' && (!record.hasRockRidge || !record.getSUEntries(isoData).filter(e => e instanceof REEntry).length)) {
-				this.set(fileName, record);
+			if (fileName !== '\u0000' && fileName !== '\u0001' && (!_record.hasRockRidge || !_record.suEntries.filter(e => e instanceof REEntry).length)) {
+				this.set(fileName, _record);
 			} else if (limit === Infinity) {
 				// First entry contains needed data.
-				limit = i + record.dataLength;
+				limit = i + _record.dataLength;
 			}
-			i += record.length;
+			i += _record.length;
 		}
-	}
 
-	public getDotEntry(isoData: Uint8Array): DirectoryRecord {
-		return new DirectoryRecord(isoData.slice(this.record.lba), this.record.rockRidgeOffset);
+		this.dotEntry = new DirectoryRecord(record.buffer, record.lba, record.rockRidgeOffset);
 	}
 }

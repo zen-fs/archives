@@ -1,6 +1,7 @@
 import { _throw, decodeUTF8, deserialize, sizeof, struct, types as t, type Tuple } from 'utilium';
 import { SLComponentRecord } from './SLComponentRecord.js';
-import { LongFormDate, ShortFormDate } from './utils.js';
+import { LongFormDate, ShortFormDate } from './misc.js';
+import { Errno, ErrnoError } from '@zenfs/core';
 
 export const enum EntrySignature {
 	CE = 0x4345,
@@ -32,14 +33,17 @@ export const enum EntrySignature {
 export
 @struct()
 class SystemUseEntry {
-	public constructor(protected data: Uint8Array = _throw('Missing data')) {
-		deserialize(this, data);
+	public constructor(
+		protected buffer: ArrayBufferLike = _throw(new ErrnoError(Errno.EINVAL, 'SystemUseEntry.buffer is required')),
+		protected byteOffset: number = _throw(new ErrnoError(Errno.EINVAL, 'SystemUseEntry.byteOffset is required'))
+	) {
+		deserialize(this, new Uint8Array(buffer, byteOffset));
 	}
 
 	@t.uint16 public signature!: EntrySignature;
 
 	public get signatureString(): string {
-		return decodeUTF8(this.data.slice(0, 2));
+		return decodeUTF8(new Uint8Array(this.buffer, this.byteOffset, 2));
 	}
 
 	@t.uint8 public length!: number;
@@ -69,8 +73,8 @@ export class CEEntry extends SystemUseEntry {
 	 */
 	@t.uint64 public size!: bigint;
 
-	public entries(data: Uint8Array): SystemUseEntry[] {
-		this._entries ||= constructSystemUseEntries(data, Number(this.extent * 2048n + this.offset), this.size, data);
+	public entries(): SystemUseEntry[] {
+		this._entries ||= constructSystemUseEntries(this.buffer, Number(this.extent * 2048n + this.offset), this.size);
 		return this._entries;
 	}
 }
@@ -115,16 +119,15 @@ export class EREntry extends SystemUseEntry {
 	@t.uint8 public extensionVersion!: number;
 
 	public get extensionIdentifier(): string {
-		return decodeUTF8(this.data.slice(8, 8 + this.idLength));
+		return decodeUTF8(new Uint8Array(this.buffer, this.byteOffset + 8, this.idLength));
 	}
 
 	public get extensionDescriptor(): string {
-		return decodeUTF8(this.data.slice(8 + this.idLength, 8 + this.idLength + this.descriptorLength));
+		return decodeUTF8(new Uint8Array(this.buffer, this.byteOffset + 8 + this.idLength, this.descriptorLength));
 	}
 
 	public get extensionSource(): string {
-		const start = 8 + this.idLength + this.descriptorLength;
-		return decodeUTF8(this.data.slice(start, start + this.sourceLength));
+		return decodeUTF8(new Uint8Array(this.buffer, 8 + this.idLength + this.descriptorLength, this.sourceLength));
 	}
 }
 
@@ -135,7 +138,7 @@ export class ESEntry extends SystemUseEntry {
 
 /**
  * RockRidge: Marks that RockRidge is in use
- * @deprecated
+ * Note: Deprecated in the spec
  */
 @struct()
 export class RREntry extends SystemUseEntry {}
@@ -181,76 +184,12 @@ export class SLEntry extends SystemUseEntry {
 		const records = [];
 		let i = 5;
 		while (i < this.length) {
-			const record = new SLComponentRecord(this.data.slice(i));
+			const record = new SLComponentRecord(this.buffer, this.byteOffset + i);
 			records.push(record);
 			i += record.length;
 		}
 		return records;
 	}
-}
-
-export function constructSystemUseEntry(data: Uint8Array): SystemUseEntry {
-	const sue = new SystemUseEntry(data);
-	switch (sue.signature) {
-		case EntrySignature.CE:
-			return new CEEntry(data);
-		case EntrySignature.PD:
-			return new PDEntry(data);
-		case EntrySignature.SP:
-			return new SPEntry(data);
-		case EntrySignature.ST:
-			return new STEntry(data);
-		case EntrySignature.ER:
-			return new EREntry(data);
-		case EntrySignature.ES:
-			return new ESEntry(data);
-		case EntrySignature.PX:
-			return new PXEntry(data);
-		case EntrySignature.PN:
-			return new PNEntry(data);
-		case EntrySignature.SL:
-			return new SLEntry(data);
-		case EntrySignature.NM:
-			return new NMEntry(data);
-		case EntrySignature.CL:
-			return new CLEntry(data);
-		case EntrySignature.PL:
-			return new PLEntry(data);
-		case EntrySignature.RE:
-			return new REEntry(data);
-		case EntrySignature.TF:
-			return new TFEntry(data);
-		case EntrySignature.SF:
-			return new SFEntry(data);
-		case EntrySignature.RR:
-			return new RREntry(data);
-		default:
-			return sue;
-	}
-}
-
-export function constructSystemUseEntries(data: Uint8Array, i: number, length: bigint, isoData: Uint8Array): SystemUseEntry[] {
-	// If the remaining allocated space following the last recorded System Use Entry in a System
-	// Use field or Continuation Area is less than four bytes long, it cannot contain a System
-	// Use Entry and shall be ignored
-	length -= 4n;
-	const entries: SystemUseEntry[] = [];
-	while (i < length) {
-		const entry = constructSystemUseEntry(data.slice(i));
-		const length = entry.length;
-		if (!length) {
-			// Invalid SU section; prevent infinite loop.
-			return entries;
-		}
-		i += length;
-		if (entry instanceof STEntry) {
-			// ST indicates the end of entries.
-			break;
-		}
-
-		entries.push(...(entry instanceof CEEntry ? entry.entries(isoData) : [entry]));
-	}
-	return entries;
 }
 
 export const enum NMFlags {
@@ -267,7 +206,7 @@ export class NMEntry extends SystemUseEntry {
 	@t.uint8 public flags!: NMFlags;
 
 	public name(getString: (data: Uint8Array) => string): string {
-		return getString(this.data.slice(5, this.length));
+		return getString(new Uint8Array(this.buffer, this.byteOffset + 5, this.length));
 	}
 }
 
@@ -325,7 +264,7 @@ export class TFEntry extends SystemUseEntry {
 		const _Date = this.flags & TFFlag.LONG_FORM ? LongFormDate : ShortFormDate;
 		const offset = 5 + index * sizeof(_Date);
 		const date = new _Date();
-		deserialize(date, this.data.slice(offset, offset + sizeof(_Date)));
+		deserialize(date, new Uint8Array(this.buffer, this.byteOffset + offset, sizeof(_Date)));
 		return date.date;
 	}
 
@@ -363,4 +302,55 @@ export class SFEntry extends SystemUseEntry {
 	@t.uint64 public virtualSizeLow!: bigint;
 
 	@t.uint8 public tableDepth!: number;
+}
+
+const signatureMap = {
+	[EntrySignature.CE]: CEEntry,
+	[EntrySignature.PD]: PDEntry,
+	[EntrySignature.SP]: SPEntry,
+	[EntrySignature.ST]: STEntry,
+	[EntrySignature.ER]: EREntry,
+	[EntrySignature.ES]: ESEntry,
+	[EntrySignature.PX]: PXEntry,
+	[EntrySignature.PN]: PNEntry,
+	[EntrySignature.SL]: SLEntry,
+	[EntrySignature.NM]: NMEntry,
+	[EntrySignature.CL]: CLEntry,
+	[EntrySignature.PL]: PLEntry,
+	[EntrySignature.RE]: REEntry,
+	[EntrySignature.TF]: TFEntry,
+	[EntrySignature.SF]: SFEntry,
+	[EntrySignature.RR]: RREntry,
+};
+
+/**
+ * @param buffer The iso file
+ * @param byteOffset The offset of the directory record
+ */
+export function constructSystemUseEntries(buffer: ArrayBufferLike, byteOffset: number, length: bigint): SystemUseEntry[] {
+	// If the remaining allocated space following the last recorded System Use Entry in a System
+	// Use field or Continuation Area is less than four bytes long, it cannot contain a System
+	// Use Entry and shall be ignored
+	length -= 4n;
+	const entries: SystemUseEntry[] = [];
+
+	while (byteOffset < length) {
+		const sue = new SystemUseEntry(buffer, byteOffset);
+
+		const entry = sue.signature in signatureMap ? new signatureMap[sue.signature](buffer, byteOffset) : sue;
+
+		const length = entry.length;
+
+		// Invalid SU section; prevent infinite loop.
+		if (!length) return entries;
+
+		byteOffset += length;
+
+		// ST indicates the end of entries.
+		if (entry instanceof STEntry) break;
+
+		entries.push(...(entry instanceof CEEntry ? entry.entries() : [entry]));
+	}
+
+	return entries;
 }

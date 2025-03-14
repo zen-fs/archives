@@ -6,8 +6,12 @@ import { suite, test } from 'node:test';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { Iso } from '../dist/iso/fs.js';
+// @ts-expect-error 7016
+import { setupLogs } from '@zenfs/core/tests/logs.js';
 
-suite('Basic ISO9660 operations', () => {
+setupLogs();
+
+await suite('Basic ISO9660 operations', () => {
 	test('Configure', async () => {
 		const data = readFileSync(dirname(fileURLToPath(import.meta.url)) + '/files/data.iso');
 		//const data = buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);

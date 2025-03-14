@@ -1,4 +1,4 @@
-import { deserialize, struct, types as t } from 'utilium';
+import { deserialize, memoize, struct, types as t } from 'utilium';
 
 @struct()
 export class LongFormDate {
@@ -84,6 +84,7 @@ export class ShortFormDate {
 	 */
 	@t.uint8 public offsetFromGMT!: number;
 
+	@memoize
 	public get date(): Date {
 		return new Date(1900 + this.year, this.month - 1, this.day, this.hour, this.minute, this.second);
 	}
@@ -93,4 +94,13 @@ export function getShortFormDate(data: Uint8Array): Date {
 	const date = new ShortFormDate();
 	deserialize(date, data);
 	return date.date;
+}
+
+export const enum FileFlags {
+	Hidden = 1,
+	Directory = 1 << 1,
+	AssociatedFile = 1 << 2,
+	EARContainsInfo = 1 << 3,
+	EARContainsPerms = 1 << 4,
+	FinalDirectoryRecordForFile = 1 << 5,
 }

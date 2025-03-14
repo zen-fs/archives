@@ -1,14 +1,18 @@
-import { configureSingle, InMemory, Overlay } from '@zenfs/core';
+import { configureSingle, InMemory, CopyOnWrite } from '@zenfs/core';
 import { readFileSync } from 'node:fs';
 import { Zip } from '../dist/zip/fs.js';
 
 const buf = readFileSync(import.meta.dirname + '/files/core.zip');
 
 await configureSingle({
-	backend: Overlay,
-	readable: Zip.create({
+	backend: CopyOnWrite,
+	readable: {
+		backend: Zip,
 		data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length),
 		name: 'core.zip',
-	}),
-	writable: InMemory.create({ name: 'tests' }),
+	},
+	writable: {
+		backend: InMemory,
+		label: 'tests',
+	},
 });

@@ -5,6 +5,10 @@ import { suite, test } from 'node:test';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { Zip } from '../dist/zip/fs.js';
+// @ts-expect-error 7016
+import { setupLogs } from '@zenfs/core/tests/logs.js';
+
+setupLogs();
 
 suite('Basic ZIP operations', () => {
 	test('Configure', async () => {

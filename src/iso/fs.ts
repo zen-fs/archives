@@ -1,12 +1,13 @@
-import { Errno, ErrnoError, FileSystem, Inode, type InodeLike, type UsageInfo } from '@zenfs/core';
+import { Errno, ErrnoError, FileSystem, Inode, type UsageInfo } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { Readonly, Sync } from '@zenfs/core/mixins/index.js';
 import { resolve } from '@zenfs/core/path.js';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
+import { decodeASCII } from 'utilium';
 import type { DirectoryRecord } from './DirectoryRecord.js';
-import type { VolumeDescriptor } from './VolumeDescriptor.js';
-import { PrimaryVolumeDescriptor, SupplementaryVolumeDescriptor, VolumeDescriptorType } from './VolumeDescriptor.js';
+import { PrimaryVolumeDescriptor, VolumeDescriptorType } from './VolumeDescriptor.js';
 import { PXEntry, TFEntry, TFFlag } from './entries.js';
+import * as log from '@zenfs/core/internal/log.js';
 
 /**
  * Options for IsoFS file system instances.
@@ -16,6 +17,7 @@ export interface IsoOptions {
 	 * The ISO file in a buffer.
 	 */
 	data: Uint8Array;
+
 	/**
 	 * The name of the ISO (optional; used for debug messages / identification via metadata.name).
 	 */
@@ -30,57 +32,54 @@ export interface IsoOptions {
  * * Microsoft Joliet and Rock Ridge extensions to the ISO9660 standard
  */
 export class IsoFS extends Readonly(Sync(FileSystem)) {
-	protected data: Uint8Array;
-	private _pvd?: VolumeDescriptor;
-	private _root: DirectoryRecord;
-	private _name: string;
+	protected pvd: PrimaryVolumeDescriptor;
 
 	/**
-	 * **Deprecated. Please use IsoFS.Create() method instead.**
-	 *
 	 * Constructs a read-only file system from the given ISO.
 	 * @param data The ISO file in a buffer.
-	 * @param name The name of the ISO (optional; used for debug messages / identification via getName()).
+	 * @param name The name of the ISO (optional; used for debug messages / identification).
 	 */
-	public constructor({ data, name = '' }: IsoOptions) {
+	public constructor(protected data: Uint8Array) {
 		super(0x2069736f, 'iso9660');
-		this._name = name;
-		this.data = data;
-		// Skip first 16 sectors.
-		let vdTerminatorFound = false;
-		let i = 16 * 2048;
-		const candidateVDs = new Array<VolumeDescriptor>();
-		while (!vdTerminatorFound && i < data.length) {
-			const slice = this.data.slice(i);
-			switch (slice[0] as VolumeDescriptorType) {
+
+		let candidate: PrimaryVolumeDescriptor | undefined;
+
+		for (let i = 16 * 2048, terminatorFound = false; i < data.length && !terminatorFound; i += 2048) {
+			switch (data[i] as VolumeDescriptorType) {
 				case VolumeDescriptorType.Primary:
-					candidateVDs.push(new PrimaryVolumeDescriptor(slice));
+					if (candidate?.type == VolumeDescriptorType.Supplementary) log.notice('iso9660: Skipping primary volume descriptor at 0x' + i.toString(16));
+					else {
+						log.debug('iso9660: Found primary volume descriptor at 0x' + i.toString(16));
+						candidate = new PrimaryVolumeDescriptor('ISO9660', data.buffer, i);
+					}
 					break;
-				case VolumeDescriptorType.Supplementary:
-					candidateVDs.push(new SupplementaryVolumeDescriptor(slice));
+				case VolumeDescriptorType.Supplementary: {
+					const vd = new PrimaryVolumeDescriptor('Joliet', data.buffer, i);
+
+					if (vd.type !== VolumeDescriptorType.Supplementary) {
+						throw log.alert(new ErrnoError(Errno.EIO, 'iso9660: Supplementary volume descriptor signature mismatch (something is very wrong!)'));
+					}
+
+					// Third character identifies what 'level' of the UCS specification to follow. We ignore it.
+					if (vd.escapeSequence[0] !== 37 || vd.escapeSequence[1] !== 47 || ![64, 67, 69].includes(vd.escapeSequence[2])) {
+						throw new ErrnoError(Errno.EIO, 'Unrecognized escape sequence for supplementary volume descriptor: ' + decodeASCII(vd.escapeSequence));
+					}
+
+					log.debug('iso9660: Found supplementary volume descriptor at 0x' + i.toString(16));
+					candidate = vd;
 					break;
+				}
 				case VolumeDescriptorType.SetTerminator:
-					vdTerminatorFound = true;
+					log.debug('iso9660: Found set terminator at 0x' + i.toString(16));
+					terminatorFound = true;
 					break;
 			}
-			i += 2048;
-		}
-		if (!candidateVDs.length) {
-			throw new ErrnoError(Errno.EIO, 'Unable to find a suitable volume descriptor.');
-		}
-		for (const v of candidateVDs) {
-			// Take an SVD over a PVD.
-			if (this._pvd?.type != VolumeDescriptorType.Supplementary) {
-				this._pvd = v;
-			}
 		}
 
-		if (!this._pvd) {
-			throw new ErrnoError(Errno.EINVAL, 'No primary volume descriptor');
-		}
+		if (!candidate) throw log.err(new ErrnoError(Errno.EIO, 'iso9660: unable to find a suitable volume descriptor'));
 
-		this._root = this._pvd.rootDirectoryEntry(this.data);
-		this.label = ['iso', this._name, this._pvd?.name, this._root && this._root.hasRockRidge && 'RockRidge'].filter(e => e).join(':');
+		log.info('iso9660: Using volume descriptor at 0x' + candidate.byteOffset.toString(16));
+		this.pvd = candidate;
 	}
 
 	public usage(): UsageInfo {
@@ -94,7 +93,7 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 		const record = this._getDirectoryRecord(path);
 		if (!record) throw ErrnoError.With('ENOENT', path, 'stat');
 
-		return this._getInode(path, record)!;
+		return this._get(path, record)!;
 	}
 
 	public readdirSync(path: string): string[] {
@@ -102,8 +101,8 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 		const record = this._getDirectoryRecord(path);
 		if (!record) throw ErrnoError.With('ENOENT', path, 'readdir');
 
-		if (record.isDirectory(this.data)) {
-			return Array.from(record.getDirectory(this.data).keys());
+		if (record.isDirectory()) {
+			return Array.from(record.directory.keys());
 		}
 
 		throw ErrnoError.With('ENOTDIR', path, 'readdir');
@@ -113,40 +112,33 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 		const record = this._getDirectoryRecord(path);
 		if (!record) throw ErrnoError.With('ENOENT', path, 'openFile');
 
-		if (record.isDirectory(this.data)) {
+		if (record.isDirectory()) {
 			throw ErrnoError.With('EISDIR', path, 'openFile');
 		}
-		const data = record.getFile(this.data);
-		buffer.set(data.subarray(offset, end));
+		buffer.set(record.file.subarray(offset, end));
 	}
 
 	private _getDirectoryRecord(path: string): DirectoryRecord | undefined {
-		// Special case.
-		if (path === '/') {
-			return this._root;
+		// Special case
+		if (path === '/') return this.pvd.root;
+
+		let dir: DirectoryRecord | undefined = this.pvd.root;
+
+		for (const part of path.split('/').slice(1)) {
+			if (!dir.isDirectory()) return;
+			dir = dir.directory.get(part);
+			if (!dir) return;
 		}
-		const parts = path.split('/').slice(1);
-		let dir: DirectoryRecord | undefined = this._root;
-		for (const part of parts) {
-			if (!dir.isDirectory(this.data)) {
-				return;
-			}
-			dir = dir.getDirectory(this.data).get(part);
-			if (!dir) {
-				return;
-			}
-		}
+
 		return dir;
 	}
 
-	private _getInode(path: string, record: DirectoryRecord): Inode | undefined {
-		if (record.isSymlink(this.data)) {
-			const newP = resolve(path, record.getSymlinkPath(this.data));
-			const dirRec = this._getDirectoryRecord(newP);
-			if (!dirRec) {
-				return;
-			}
-			return this._getInode(newP, dirRec);
+	private _get(path: string, record: DirectoryRecord): Inode | undefined {
+		if (record.isSymlink) {
+			const target = resolve(path, record.symlinkPath);
+			const targetRecord = this._getDirectoryRecord(target);
+			if (!targetRecord) return;
+			return this._get(target, targetRecord);
 		}
 
 		let mode = 0o555;
@@ -155,32 +147,24 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 			mtimeMs = time,
 			ctimeMs = time;
 		if (record.hasRockRidge) {
-			const entries = record.getSUEntries(this.data);
-			for (const entry of entries) {
+			for (const entry of record.suEntries) {
 				if (entry instanceof PXEntry) {
 					mode = Number(entry.mode);
 					continue;
 				}
 
-				if (!(entry instanceof TFEntry)) {
-					continue;
-				}
+				if (!(entry instanceof TFEntry)) continue;
+
 				const flags = entry.flags;
-				if (flags & TFFlag.ACCESS) {
-					atimeMs = entry.access!.getTime();
-				}
-				if (flags & TFFlag.MODIFY) {
-					mtimeMs = entry.modify!.getTime();
-				}
-				if (flags & TFFlag.CREATION) {
-					ctimeMs = entry.creation!.getTime();
-				}
+				if (flags & TFFlag.ACCESS) atimeMs = entry.access!.getTime();
+				if (flags & TFFlag.MODIFY) mtimeMs = entry.modify!.getTime();
+				if (flags & TFFlag.CREATION) ctimeMs = entry.creation!.getTime();
 			}
 		}
 		// Mask out writeable flags. This is a RO file system.
 		mode &= 0o555;
 		return new Inode({
-			mode: mode | (record.isDirectory(this.data) ? S_IFDIR : S_IFREG),
+			mode: mode | (record.isDirectory() ? S_IFDIR : S_IFREG),
 			size: record.dataLength,
 			atimeMs,
 			mtimeMs,
@@ -192,16 +176,15 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 const _Iso = {
 	name: 'Iso',
 
-	isAvailable(): boolean {
-		return true;
-	},
-
 	options: {
 		data: { type: Uint8Array, required: true },
+		name: { type: 'string', required: false },
 	},
 
 	create(options: IsoOptions) {
-		return new IsoFS(options);
+		const fs = new IsoFS(options.data);
+		fs.label = options.name;
+		return fs;
 	},
 } as const satisfies Backend<IsoFS, IsoOptions>;
 type _Iso = typeof _Iso;

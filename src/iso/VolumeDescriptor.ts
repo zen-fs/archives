@@ -1,7 +1,10 @@
 import { Errno, ErrnoError } from '@zenfs/core';
-import { _throw, decodeASCII, deserialize, member, struct, types as t } from 'utilium';
+import { _throw, deserialize, member, struct, types as t } from 'utilium';
 import { DirectoryRecord } from './DirectoryRecord.js';
-import { LongFormDate } from './utils.js';
+import { LongFormDate } from './misc.js';
+import { EREntry, RREntry, SPEntry } from './entries.js';
+
+const rockRidgeIdentifier = 'IEEE_P1282';
 
 export const enum VolumeDescriptorType {
 	BootRecord = 0,
@@ -13,17 +16,52 @@ export const enum VolumeDescriptorType {
 
 @struct()
 export class VolumeDescriptor {
-	public constructor(protected _data: Uint8Array = _throw('Missing data')) {
-		deserialize(this, _data);
-	}
-
 	@t.uint8 public type!: VolumeDescriptorType;
 
 	@t.char(5) public standardIdentifier: string = '';
 
 	@t.uint8 public version!: number;
 
-	@t.char(1) protected __padding__7!: number;
+	@t.char protected __padding__7!: number;
+}
+
+/**
+ * Primary or supplementary volume descriptor.
+ * Supplementary VDs are basically PVDs with some extra sauce, so we use the same struct for both.
+ */
+@struct()
+export class PrimaryVolumeDescriptor extends VolumeDescriptor {
+	public constructor(
+		/**
+		 * The name of the volume descriptor type, either 'ISO9660' or 'Joliet'.
+		 */
+		public readonly name: string = _throw(new ErrnoError(Errno.EINVAL, 'VolumeDescriptor.name is required')),
+		public readonly buffer: ArrayBufferLike = _throw(new ErrnoError(Errno.EINVAL, 'VolumeDescriptor.buffer is required')),
+		public readonly byteOffset: number = 0
+	) {
+		super();
+
+		this._root = new DirectoryRecord(buffer, byteOffset + 156);
+		this._root._kind = this.name;
+
+		const dir = this._root.directory.dotEntry;
+
+		if (dir.suEntries.length && dir.suEntries[0] instanceof SPEntry && dir.suEntries[0].checkMagic()) {
+			// SUSP is in use.
+			for (const entry of dir.suEntries.slice(1)) {
+				if (entry instanceof RREntry || (entry instanceof EREntry && entry.extensionIdentifier === rockRidgeIdentifier)) {
+					// Rock Ridge is in use!
+					this._root.rockRidgeOffset = dir.suEntries[0].skip;
+					break;
+				}
+			}
+		}
+
+		// Wipe out directory. Start over with RR knowledge.
+		if (this._root.rockRidgeOffset > -1) (dir as any)._dir = undefined;
+
+		deserialize(this, new Uint8Array(buffer, byteOffset));
+	}
 
 	protected _decoder?: TextDecoder;
 
@@ -57,7 +95,7 @@ export class VolumeDescriptor {
 		return this._decode(this._volumeIdentifier);
 	}
 
-	@t.char(8) protected __padding__72!: number;
+	@t.char(8) protected __padding__72 = new Uint8Array(8);
 
 	/**
 	 * Number of Logical Blocks in which the volume is recorded.
@@ -68,7 +106,7 @@ export class VolumeDescriptor {
 	/**
 	 * This is only used by Joliet
 	 */
-	@t.char(32) protected escapeSequence = new Uint8Array(32);
+	@t.char(32) public escapeSequence = new Uint8Array(32);
 
 	/**
 	 * The size of the set in this logical volume (number of disks).
@@ -111,13 +149,13 @@ export class VolumeDescriptor {
 	@t.uint32 protected _locationOfTypeMPathTable!: number;
 
 	public get locationOfTypeMPathTable(): number {
-		return new DataView(this._data.buffer).getUint32(148);
+		return new DataView(this.buffer).getUint32(148);
 	}
 
 	@t.uint32 protected _locationOfOptionalTypeMPathTable!: number;
 
 	public locationOfOptionalTypeMPathTable(): number {
-		return new DataView(this._data.buffer).getUint32(152);
+		return new DataView(this.buffer).getUint32(152);
 	}
 
 	/**
@@ -127,14 +165,11 @@ export class VolumeDescriptor {
 	 * which contains a single byte Directory Identifier (0x00),
 	 * hence the fixed 34 byte size.
 	 */
-	@member(DirectoryRecord) protected _root!: DirectoryRecord;
+	@member(DirectoryRecord) protected _root: DirectoryRecord;
 
-	public rootDirectoryEntry(isoData: Uint8Array): DirectoryRecord {
-		if (!this._root) {
-			this._root = new DirectoryRecord(this._data.slice(156), -1);
-			this._root.rootCheckForRockRidge(isoData);
-		}
-		this._root._kind = this.name;
+	public get root(): DirectoryRecord {
+		if (this._root && this._root.buffer) return this._root;
+
 		return this._root;
 	}
 
@@ -209,36 +244,5 @@ export class VolumeDescriptor {
 				Volume sequence number: ${this.volumeSequenceNumber}
 				Logical block size: ${this.logicalBlockSize}
 				Volume size: ${this.volumeSpaceSize}`.replaceAll('\t', '');
-	}
-
-	// Needs to be implemented by subclasses.
-	declare public readonly name: string;
-}
-
-@struct()
-export class PrimaryVolumeDescriptor extends VolumeDescriptor {
-	public readonly name = 'ISO9660';
-
-	public constructor(data: Uint8Array = _throw('Missing data')) {
-		super(data);
-		if (this.type !== VolumeDescriptorType.Primary) {
-			throw new ErrnoError(Errno.EIO, 'Invalid primary volume descriptor.');
-		}
-	}
-}
-
-@struct()
-export class SupplementaryVolumeDescriptor extends VolumeDescriptor {
-	public readonly name = 'Joliet';
-
-	public constructor(data: Uint8Array = _throw('Missing data')) {
-		super(data);
-		if (this.type !== VolumeDescriptorType.Supplementary) {
-			throw new ErrnoError(Errno.EIO, 'Invalid supplementary volume descriptor.');
-		}
-		// Third character identifies what 'level' of the UCS specification to follow. We ignore it.
-		if (this.escapeSequence[0] !== 37 || this.escapeSequence[1] !== 47 || ![64, 67, 69].includes(this.escapeSequence[2])) {
-			throw new ErrnoError(Errno.EIO, 'Unrecognized escape sequence for SupplementaryVolumeDescriptor: ' + decodeASCII(this.escapeSequence));
-		}
 	}
 }

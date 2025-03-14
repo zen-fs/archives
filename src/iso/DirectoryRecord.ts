@@ -1,19 +1,14 @@
 import { Errno, ErrnoError, log } from '@zenfs/core';
-import { deserialize, member, struct, types as t } from 'utilium';
+import { deserialize, member, memoize, sizeof, struct, types as t } from 'utilium';
 import { Directory } from './Directory.js';
 import { SLComponentFlags } from './SLComponentRecord.js';
-import { FileFlags, rockRidgeIdentifier } from './constants.js';
 import type { SystemUseEntry } from './entries.js';
-import { CLEntry, EREntry, NMEntry, NMFlags, RREntry, SLEntry, SPEntry, constructSystemUseEntries } from './entries.js';
-import { ShortFormDate } from './utils.js';
-import { _throw } from 'utilium/misc.js';
+import { CLEntry, NMEntry, NMFlags, SLEntry, constructSystemUseEntries } from './entries.js';
+import { ShortFormDate, FileFlags } from './misc.js';
 
 @struct()
 export class DirectoryRecord {
-	protected _view: DataView;
-	protected _suEntries?: SystemUseEntry[];
-	protected _file?: Uint8Array;
-	protected _dir?: Directory;
+	protected _view?: DataView;
 
 	/**
 	 * @internal
@@ -21,35 +16,22 @@ export class DirectoryRecord {
 	_kind?: string;
 
 	public constructor(
-		protected data: Uint8Array = _throw('Missing data'),
+		public readonly buffer?: ArrayBufferLike,
+		public readonly byteOffset?: number,
 		/**
 		 * Offset at which system use entries begin. Set to -1 if not enabled.
+		 * @internal
 		 */
-		protected _rockRidgeOffset: number = _throw('Missing rock ridge offset')
+		public rockRidgeOffset: number = -1
 	) {
-		deserialize(this, data);
-		this._view = new DataView(data.buffer);
+		if (buffer && byteOffset) {
+			deserialize(this, new Uint8Array(buffer, byteOffset));
+			this._view = new DataView(buffer);
+		}
 	}
 
 	public get hasRockRidge(): boolean {
-		return this._rockRidgeOffset > -1;
-	}
-
-	public get rockRidgeOffset(): number {
-		return this._rockRidgeOffset;
-	}
-
-	/**
-	 * !!ONLY VALID ON ROOT NODE!!
-	 * Checks if Rock Ridge is enabled, and sets the offset.
-	 */
-	public rootCheckForRockRidge(isoData: Uint8Array): void {
-		const dir = this.getDirectory(isoData);
-		this._rockRidgeOffset = dir.getDotEntry(isoData)._getRockRidgeOffset(isoData);
-		if (this._rockRidgeOffset > -1) {
-			// Wipe out directory. Start over with RR knowledge.
-			this._dir = undefined;
-		}
+		return this.rockRidgeOffset > -1;
 	}
 
 	@t.uint8 public length!: number;
@@ -90,61 +72,54 @@ export class DirectoryRecord {
 
 	@t.uint8 protected identifierLength!: number;
 
-	/**
-	 * Variable length, which is not supported by Utilium at the moment
-	 */
-	@t.char(0) protected _identifier: string = '';
+	@t.char('identifierLength') protected _identifier = new Uint8Array(256); // Reasonable upper limit?
 
 	public get identifier(): string {
-		const stringData = this.data.slice(33, 33 + this.identifierLength);
-		return this._decode(stringData);
+		return this._decode(this._identifier.slice(0, this.identifierLength));
 	}
 
-	public fileName(isoData: Uint8Array): string {
-		if (this.hasRockRidge) {
-			const fn = this._rockRidgeFilename(isoData);
-			if (fn != null) return fn;
-		}
-		const ident = this.identifier;
-		if (this.isDirectory(isoData)) return ident;
+	@memoize
+	public get fileName(): string {
+		if (this._rockRidgeFilename) return this._rockRidgeFilename;
+
+		if (this.isDirectory()) return this.identifier;
 
 		// Files:
 		// - MUST have 0x2E (.) separating the name from the extension
 		// - MUST have 0x3B (;) separating the file name and extension from the version
 		// Gets expanded to two-byte char in Unicode directory records.
-		const versionSeparator = ident.indexOf(';');
+		const versionSeparator = this.identifier.indexOf(';');
 
 		// Some Joliet filenames lack the version separator, despite the standard specifying that it should be there.
-		if (versionSeparator === -1) return ident;
+		if (versionSeparator === -1) return this.identifier;
 
 		// Empty extension. Do not include '.' in the filename.
-		if (ident[versionSeparator - 1] === '.') return ident.slice(0, versionSeparator - 1);
+		if (this.identifier.at(-1) === '.') return this.identifier.slice(0, versionSeparator - 1);
 
 		// Include up to version separator.
-		return ident.slice(0, versionSeparator);
+		return this.identifier.slice(0, versionSeparator);
 	}
 
-	public isDirectory(isoData: Uint8Array): boolean {
+	public isDirectory(): boolean {
 		let rv = !!(this.fileFlags & FileFlags.Directory);
 		// If it lacks the Directory flag, it may still be a directory if we've exceeded the directory
 		// depth limit. Rock Ridge marks these as files and adds a special attribute.
-		if (!rv && this.hasRockRidge) {
-			rv = this.getSUEntries(isoData).filter(e => e instanceof CLEntry).length > 0;
-		}
+		if (!rv && this.hasRockRidge) rv = this.suEntries.filter(e => e instanceof CLEntry).length > 0;
 		return rv;
 	}
 
-	public isSymlink(isoData: Uint8Array): boolean {
-		return this.hasRockRidge && this.getSUEntries(isoData).filter(e => e instanceof SLEntry).length > 0;
+	@memoize
+	public get isSymlink(): boolean {
+		return this.hasRockRidge && this.suEntries.filter(e => e instanceof SLEntry).length > 0;
 	}
 
 	/**
 	 * @todo Use a `switch` when checking flags?
 	 */
-	public getSymlinkPath(isoData: Uint8Array): string {
+	@memoize
+	public get symlinkPath(): string {
 		let path = '';
-		const entries = this.getSUEntries(isoData);
-		for (const entry of entries) {
+		for (const entry of this.suEntries) {
 			if (!(entry instanceof SLEntry)) continue;
 
 			const components = entry.componentRecords;
@@ -171,29 +146,33 @@ export class DirectoryRecord {
 		return path.endsWith('/') ? path.slice(0, -1) : path;
 	}
 
-	public getFile(isoData: Uint8Array): Uint8Array {
-		if (this.isDirectory(isoData)) throw log.err(ErrnoError.With('EISDIR', undefined, 'read'));
-		this._file ??= isoData.slice(this.lba, this.lba + this.dataLength);
-		return this._file;
+	@memoize
+	public get file(): Uint8Array {
+		if (!this.buffer) throw log.err(ErrnoError.With('ENODATA', undefined, 'read'));
+		if (this.isDirectory()) throw log.err(ErrnoError.With('EISDIR', undefined, 'read'));
+		return new Uint8Array(this.buffer, this.lba, this.dataLength);
 	}
 
-	public getDirectory(isoData: Uint8Array): Directory {
-		if (!this.isDirectory(isoData)) throw log.err(ErrnoError.With('ENOTDIR', undefined, 'read'));
-		this._dir ??= new Directory(this, isoData);
-		return this._dir;
+	@memoize
+	public get directory(): Directory {
+		if (!this.buffer) throw log.err(ErrnoError.With('ENODATA', undefined, 'read'));
+		if (!this.isDirectory()) throw log.err(ErrnoError.With('ENOTDIR', undefined, 'read'));
+		return new Directory(this);
 	}
 
-	public getSUEntries(isoData: Uint8Array): SystemUseEntry[] {
-		if (this._suEntries) return this._suEntries;
-		let i = 33 + this.data[32];
+	@memoize
+	public get suEntries(): SystemUseEntry[] {
+		if (!this.buffer) throw log.err(ErrnoError.With('ENODATA', undefined, 'read'));
+		let i = sizeof(this as any);
 		if (i % 2 === 1) i++; // Skip padding fields.
-		i += this._rockRidgeOffset;
-		this._suEntries = constructSystemUseEntries(this.data, i, BigInt(this.length), isoData);
-		return this._suEntries;
+		i += this.rockRidgeOffset;
+		return constructSystemUseEntries(this.buffer, i, BigInt(this.length));
 	}
 
-	protected getString(): string {
-		return this._decode(this.data);
+	@memoize
+	protected get string(): string {
+		if (!this.buffer) throw log.err(ErrnoError.With('ENODATA', undefined, 'read'));
+		return this._decode(new Uint8Array(this.buffer, this.byteOffset));
 	}
 
 	private _decoder?: TextDecoder;
@@ -203,8 +182,10 @@ export class DirectoryRecord {
 		return (data: Uint8Array) => this._decoder!.decode(data).toLowerCase();
 	}
 
-	protected _rockRidgeFilename(isoData: Uint8Array): string | null {
-		const nmEntries = this.getSUEntries(isoData).filter(e => e instanceof NMEntry);
+	@memoize
+	protected get _rockRidgeFilename(): string | null {
+		if (!this.hasRockRidge) return null;
+		const nmEntries = this.suEntries.filter(e => e instanceof NMEntry);
 		if (!nmEntries.length || nmEntries[0].flags & (NMFlags.CURRENT | NMFlags.PARENT)) return null;
 
 		let str = '';
@@ -213,33 +194,5 @@ export class DirectoryRecord {
 			if (!(e.flags & NMFlags.CONTINUE)) break;
 		}
 		return str;
-	}
-
-	/**
-	 * !!ONLY VALID ON FIRST ENTRY OF ROOT DIRECTORY!!
-	 * Returns -1 if rock ridge is not enabled. Otherwise, returns the offset
-	 * at which system use fields begin.
-	 */
-	private _getRockRidgeOffset(isoData: Uint8Array): number {
-		// In the worst case, we get some garbage SU entries.
-		// Fudge offset to 0 before proceeding.
-		this._rockRidgeOffset = 0;
-		const suEntries = this.getSUEntries(isoData);
-		if (suEntries.length > 0) {
-			const spEntry = suEntries[0];
-			if (spEntry instanceof SPEntry && spEntry.checkMagic()) {
-				// SUSP is in use.
-				for (let i = 1; i < suEntries.length; i++) {
-					const entry = suEntries[i];
-					if (entry instanceof RREntry || (entry instanceof EREntry && entry.extensionIdentifier === rockRidgeIdentifier)) {
-						// Rock Ridge is in use!
-						return spEntry.skip;
-					}
-				}
-			}
-		}
-		// Failed.
-		this._rockRidgeOffset = -1;
-		return -1;
 	}
 }

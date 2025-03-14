@@ -1,6 +1,6 @@
 import { Errno, ErrnoError, Inode } from '@zenfs/core';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
-import { _throw, deserialize, sizeof, struct, types as t } from 'utilium';
+import { _throw, deserialize, memoize, sizeof, struct, types as t } from 'utilium';
 import { CompressionMethod, decompressionMethods } from './compression.js';
 import { msdosDate, safeDecode } from './utils.js';
 
@@ -338,6 +338,7 @@ export class FileEntry {
 	/**
 	 * Whether this entry is a directory
 	 */
+	@memoize
 	public get isDirectory(): boolean {
 		/* 
 			NOTE: This assumes that the zip file implementation uses the lower byte
@@ -356,8 +357,6 @@ export class FileEntry {
 		return !this.isDirectory;
 	}
 
-	protected _contents?: Uint8Array;
-
 	protected _decompress(): Uint8Array {
 		// Get the local header before we can figure out where the actual compressed data starts.
 		const { compressionMethod, size, name } = new LocalFileHeader(new Uint8Array(this._data.buffer, this.headerRelativeOffset));
@@ -375,17 +374,17 @@ export class FileEntry {
 	 * Gets the file data, and decompresses it if needed.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.8
 	 */
+	@memoize
 	public get contents(): Uint8Array {
-		this._contents ??= this._decompress();
-		return this._contents;
+		return this._decompress();
 	}
 
 	/**
 	 * @deprecated Use `contents`
 	 */
+	@memoize
 	public get data(): Uint8Array {
-		this._contents ??= this._decompress();
-		return this._contents;
+		return this._decompress();
 	}
 
 	public get inode(): Inode {
@@ -482,6 +481,7 @@ export class Header {
 	 * Assuming the content is UTF-8 encoded. The specification doesn't specify.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.26
 	 */
+	@memoize
 	public get comment(): string {
 		return safeDecode(this.data, true, 22, this.commentLength);
 	}
