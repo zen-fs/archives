@@ -1,4 +1,5 @@
-import { Errno, ErrnoError, FileSystem, Inode, type UsageInfo } from '@zenfs/core';
+import { withErrno } from 'kerium';
+import { FileSystem, Inode, type UsageInfo } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { Readonly } from '@zenfs/core/mixins/readonly.js';
 import { Sync } from '@zenfs/core/mixins/sync.js';
@@ -11,11 +12,11 @@ import { computeEOCD, FileEntry } from './zip.js';
 /**
  * Configuration options for a ZipFS file system.
  */
-export interface ZipOptions {
+export interface ZipOptions<TBuffer extends ArrayBufferLike = ArrayBuffer> {
 	/**
 	 * The zip file as a binary buffer.
 	 */
-	data: ArrayBufferLike | ArrayBufferView;
+	data: TBuffer | ArrayBufferView<TBuffer>;
 
 	/**
 	 * The name of the zip file (optional).
@@ -55,39 +56,39 @@ export interface ZipOptions {
  *   - Stream it out to a location.
  *   This isn't that bad, so we might do this at a later date.
  */
-export class ZipFS extends Readonly(Sync(FileSystem)) {
-	protected files: Map<string, FileEntry> = new Map();
+export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readonly(Sync(FileSystem)) {
+	protected files: Map<string, FileEntry<TBuffer>> = new Map();
 	protected directories: Map<string, Set<string>> = new Map();
 
 	protected _time = Date.now();
 
-	protected readonly eocd: Header;
+	protected readonly eocd: Header<TBuffer>;
 
 	public constructor(
 		public label: string,
-		protected data: Uint8Array
+		protected data: Uint8Array<TBuffer>
 	) {
 		super(0x207a6970, 'zipfs');
 
 		this.eocd = computeEOCD(data);
 		if (this.eocd.disk != this.eocd.entriesDisk) {
-			throw new ErrnoError(Errno.EINVAL, 'ZipFS does not support spanned zip files.');
+			throw withErrno('EINVAL', 'ZipFS does not support spanned zip files.');
 		}
 
 		let ptr = this.eocd.offset;
 
 		if (ptr === 0xffffffff) {
-			throw new ErrnoError(Errno.EINVAL, 'ZipFS does not support Zip64.');
+			throw withErrno('EINVAL', 'ZipFS does not support Zip64.');
 		}
 		const cdEnd = ptr + this.eocd.size;
 
 		while (ptr < cdEnd) {
-			const cd = new FileEntry(this.data.subarray(ptr));
+			const cd = new FileEntry<TBuffer>(data.buffer, data.byteOffset + ptr);
 			/* 	Paths must be absolute,
 			yet zip file paths are always relative to the zip root.
 			So we prepend '/' and call it a day. */
 			if (cd.name.startsWith('/')) {
-				throw new ErrnoError(Errno.EPERM, 'Unexpectedly encountered an absolute path in a zip file.');
+				throw withErrno('EPERM', 'Unexpectedly encountered an absolute path in a zip file.');
 			}
 			// Strip the trailing '/' if it exists
 			const name = cd.name.endsWith('/') ? cd.name.slice(0, -1) : cd.name;
@@ -142,7 +143,7 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 
 		const entry = this.files.get(path);
 
-		if (!entry) throw ErrnoError.With('ENOENT', path, 'stat');
+		if (!entry) throw withErrno('ENOENT');
 
 		return entry.inode;
 	}
@@ -150,19 +151,19 @@ export class ZipFS extends Readonly(Sync(FileSystem)) {
 	public readdirSync(path: string): string[] {
 		const inode = this.statSync(path);
 
-		if (!(inode.mode & S_IFDIR)) throw ErrnoError.With('ENOTDIR', path, 'readdir');
+		if (!(inode.mode & S_IFDIR)) throw withErrno('ENOTDIR');
 
 		const entries = this.directories.get(path);
 
-		if (!entries) throw ErrnoError.With('ENODATA', path, 'readdir');
+		if (!entries) throw withErrno('ENODATA');
 
 		return Array.from(entries);
 	}
 
 	public readSync(path: string, buffer: Uint8Array, offset: number, end: number): void {
-		if (this.directories.has(path)) throw ErrnoError.With('EISDIR', path, 'read');
+		if (this.directories.has(path)) throw withErrno('EISDIR');
 
-		const { contents: data } = this.files.get(path) ?? _throw(ErrnoError.With('ENOENT', path, 'read'));
+		const { contents: data } = this.files.get(path) ?? _throw(withErrno('ENOENT'));
 
 		buffer.set(data.subarray(offset, end));
 	}
@@ -183,8 +184,8 @@ const _Zip = {
 		return true;
 	},
 
-	create({ name, data }: ZipOptions): ZipFS {
-		return new ZipFS(name ?? '', ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : new Uint8Array(data));
+	create<TBuffer extends ArrayBufferLike = ArrayBuffer>({ name, data }: ZipOptions<TBuffer>): ZipFS<TBuffer> {
+		return new ZipFS<TBuffer>(name ?? '', ArrayBuffer.isView(data) ? new Uint8Array<TBuffer>(data.buffer, data.byteOffset, data.byteLength) : new Uint8Array<TBuffer>(data));
 	},
 } satisfies Backend<ZipFS, ZipOptions>;
 type _Zip = typeof _Zip;

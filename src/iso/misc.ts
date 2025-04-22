@@ -1,8 +1,10 @@
-import { deserialize, memoize, struct, types as t } from 'utilium';
+import { packed, struct, types as t } from 'memium';
+import { memoize } from 'utilium';
+import { BufferView } from 'utilium/buffer.js';
 
-@struct()
-export class LongFormDate {
-	@t.char(4) protected _year: string = '';
+@struct(packed)
+export class LongFormDate<T extends ArrayBufferLike = ArrayBuffer> extends BufferView<T> {
+	@t.char(4) protected accessor _year: string = '';
 	public get year(): number {
 		return parseInt(this._year);
 	}
@@ -10,7 +12,7 @@ export class LongFormDate {
 		this._year = value.toFixed();
 	}
 
-	@t.char(2) protected _month: string = '';
+	@t.char(2) protected accessor _month: string = '';
 	public get month(): number {
 		return parseInt(this._month);
 	}
@@ -18,7 +20,7 @@ export class LongFormDate {
 		this._month = value.toFixed();
 	}
 
-	@t.char(2) protected _day: string = '';
+	@t.char(2) protected accessor _day: string = '';
 	public get day(): number {
 		return parseInt(this._day);
 	}
@@ -26,7 +28,7 @@ export class LongFormDate {
 		this._day = value.toFixed();
 	}
 
-	@t.char(2) protected _hour: string = '';
+	@t.char(2) protected accessor _hour: string = '';
 	public get hour(): number {
 		return parseInt(this._hour);
 	}
@@ -34,7 +36,7 @@ export class LongFormDate {
 		this._hour = value.toFixed();
 	}
 
-	@t.char(2) protected _minute: string = '';
+	@t.char(2) protected accessor _minute: string = '';
 	public get minute(): number {
 		return parseInt(this._minute);
 	}
@@ -42,7 +44,7 @@ export class LongFormDate {
 		this._minute = value.toFixed();
 	}
 
-	@t.char(2) protected _second: string = '';
+	@t.char(2) protected accessor _second: string = '';
 	public get second(): number {
 		return parseInt(this._second);
 	}
@@ -50,7 +52,7 @@ export class LongFormDate {
 		this._second = value.toFixed();
 	}
 
-	@t.char(2) protected _centisecond: string = '';
+	@t.char(2) protected accessor _centisecond: string = '';
 	public get centisecond(): number {
 		return parseInt(this._centisecond);
 	}
@@ -58,31 +60,31 @@ export class LongFormDate {
 		this._centisecond = value.toFixed();
 	}
 
-	@t.uint8 public offsetFromGMT!: number;
+	@t.uint8 public accessor offsetFromGMT!: number;
 
 	public get date(): Date {
 		return new Date(this.year, this.month, this.day, this.hour, this.minute, this.second, this.centisecond * 10);
 	}
 }
 
-@struct()
-export class ShortFormDate {
+@struct(packed)
+export class ShortFormDate<T extends ArrayBufferLike = ArrayBuffer> extends Uint8Array<T> {
 	/**
 	 * Years since 1990
 	 * @todo This may not be the correct size
 	 * @see https://wiki.osdev.org/ISO_9660
 	 */
-	@t.uint8 public year!: number;
-	@t.uint8 public month!: number;
-	@t.uint8 public day!: number;
-	@t.uint8 public hour!: number;
-	@t.uint8 public minute!: number;
-	@t.uint8 public second!: number;
+	@t.uint8 public accessor year!: number;
+	@t.uint8 public accessor month!: number;
+	@t.uint8 public accessor day!: number;
+	@t.uint8 public accessor hour!: number;
+	@t.uint8 public accessor minute!: number;
+	@t.uint8 public accessor second!: number;
 
 	/**
 	 * Note: Timezone is ignored
 	 */
-	@t.uint8 public offsetFromGMT!: number;
+	@t.uint8 public accessor offsetFromGMT!: number;
 
 	@memoize
 	public get date(): Date {
@@ -91,8 +93,7 @@ export class ShortFormDate {
 }
 
 export function getShortFormDate(data: Uint8Array): Date {
-	const date = new ShortFormDate();
-	deserialize(date, data);
+	const date = new ShortFormDate(data.buffer, data.byteOffset, data.byteLength);
 	return date.date;
 }
 

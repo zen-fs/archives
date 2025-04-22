@@ -1,4 +1,5 @@
-import { Errno, ErrnoError, FileSystem, Inode, log, type UsageInfo } from '@zenfs/core';
+import { FileSystem, Inode, type UsageInfo } from '@zenfs/core';
+import { log, withErrno } from 'kerium';
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { Readonly, Sync } from '@zenfs/core/mixins/index.js';
 import { resolve } from '@zenfs/core/path.js';
@@ -56,12 +57,12 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 					const vd = new PrimaryVolumeDescriptor('Joliet', data.buffer, i);
 
 					if (vd.type !== VolumeDescriptorType.Supplementary) {
-						throw log.alert(new ErrnoError(Errno.EIO, 'iso9660: Supplementary volume descriptor signature mismatch (something is very wrong!)'));
+						throw log.alert(withErrno('EIO', 'iso9660: Supplementary volume descriptor signature mismatch (something is very wrong!)'));
 					}
 
 					// Third character identifies what 'level' of the UCS specification to follow. We ignore it.
 					if (vd.escapeSequence[0] !== 37 || vd.escapeSequence[1] !== 47 || ![64, 67, 69].includes(vd.escapeSequence[2])) {
-						throw new ErrnoError(Errno.EIO, 'Unrecognized escape sequence for supplementary volume descriptor: ' + decodeASCII(vd.escapeSequence));
+						throw withErrno('EIO', 'Unrecognized escape sequence for supplementary volume descriptor: ' + decodeASCII(vd.escapeSequence));
 					}
 
 					log.debug('iso9660: Found supplementary volume descriptor at 0x' + i.toString(16));
@@ -75,7 +76,7 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 			}
 		}
 
-		if (!candidate) throw log.err(new ErrnoError(Errno.EIO, 'iso9660: unable to find a suitable volume descriptor'));
+		if (!candidate) throw withErrno('EIO', 'iso9660: unable to find a suitable volume descriptor');
 
 		log.info('iso9660: Using volume descriptor at 0x' + candidate.byteOffset.toString(16));
 		this.pvd = candidate;
@@ -90,7 +91,7 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 
 	public statSync(path: string): Inode {
 		const record = this._getDirectoryRecord(path);
-		if (!record) throw ErrnoError.With('ENOENT', path, 'stat');
+		if (!record) throw withErrno('ENOENT');
 
 		return this._get(path, record)!;
 	}
@@ -98,21 +99,21 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 	public readdirSync(path: string): string[] {
 		// Check if it exists.
 		const record = this._getDirectoryRecord(path);
-		if (!record) throw ErrnoError.With('ENOENT', path, 'readdir');
+		if (!record) throw withErrno('ENOENT');
 
 		if (record.isDirectory()) {
 			return Array.from(record.directory.keys());
 		}
 
-		throw ErrnoError.With('ENOTDIR', path, 'readdir');
+		throw withErrno('ENOTDIR');
 	}
 
 	public readSync(path: string, buffer: Uint8Array, offset: number, end: number): void {
 		const record = this._getDirectoryRecord(path);
-		if (!record) throw ErrnoError.With('ENOENT', path, 'openFile');
+		if (!record) throw withErrno('ENOENT');
 
 		if (record.isDirectory()) {
-			throw ErrnoError.With('EISDIR', path, 'openFile');
+			throw withErrno('EISDIR');
 		}
 		buffer.set(record.file.subarray(offset, end));
 	}

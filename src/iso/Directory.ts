@@ -27,7 +27,8 @@ export class Directory extends Map<string, DirectoryRecord> {
 				i++;
 				continue;
 			}
-			const _record = new DirectoryRecord(record.buffer, i, record.rockRidgeOffset);
+			const _record = new DirectoryRecord(record.buffer, i);
+			_record.rockRidgeOffset = record.rockRidgeOffset;
 			const fileName = _record.fileName;
 			// Skip '.' and '..' entries.
 			if (fileName !== '\u0000' && fileName !== '\u0001' && (!_record.hasRockRidge || !_record.suEntries.filter(e => e instanceof REEntry).length)) {
@@ -39,6 +40,7 @@ export class Directory extends Map<string, DirectoryRecord> {
 			i += _record.length;
 		}
 
-		this.dotEntry = new DirectoryRecord(record.buffer, record.lba, record.rockRidgeOffset);
+		this.dotEntry = new DirectoryRecord(record.buffer, record.lba);
+		this.dotEntry.rockRidgeOffset = record.rockRidgeOffset;
 	}
 }

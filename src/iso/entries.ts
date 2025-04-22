@@ -1,7 +1,8 @@
-import { _throw, decodeUTF8, deserialize, sizeof, struct, types as t, type Tuple } from 'utilium';
+import { packed, sizeof, struct, types as t } from 'memium';
+import { decodeUTF8, type Tuple } from 'utilium';
+import { BufferView } from 'utilium/buffer.js';
 import { SLComponentRecord } from './SLComponentRecord.js';
 import { LongFormDate, ShortFormDate } from './misc.js';
-import { Errno, ErrnoError } from '@zenfs/core';
 
 export const enum EntrySignature {
 	CE = 0x4345,
@@ -30,48 +31,40 @@ export const enum EntrySignature {
 /**
  * Base system use entry
  */
-export
-@struct()
-class SystemUseEntry {
-	public constructor(
-		protected buffer: ArrayBufferLike = _throw(new ErrnoError(Errno.EINVAL, 'SystemUseEntry.buffer is required')),
-		protected byteOffset: number = _throw(new ErrnoError(Errno.EINVAL, 'SystemUseEntry.byteOffset is required'))
-	) {
-		deserialize(this, new Uint8Array(buffer, byteOffset));
-	}
-
-	@t.uint16 public signature!: EntrySignature;
+@struct(packed)
+export class SystemUseEntry extends BufferView {
+	@t.uint16 public accessor signature!: EntrySignature;
 
 	public get signatureString(): string {
 		return decodeUTF8(new Uint8Array(this.buffer, this.byteOffset, 2));
 	}
 
-	@t.uint8 public length!: number;
+	@t.uint8 public accessor length!: number;
 
-	@t.uint8 public suVersion!: number;
+	@t.uint8 public accessor suVersion!: number;
 }
 
 /**
  * Continuation entry.
  */
-@struct()
+@struct(packed)
 export class CEEntry extends SystemUseEntry {
 	protected _entries: SystemUseEntry[] = [];
 
 	/**
 	 * Logical block address of the continuation area.
 	 */
-	@t.uint64 public extent!: bigint;
+	@t.uint64 public accessor extent!: bigint;
 
 	/**
 	 * Offset into the logical block.
 	 */
-	@t.uint64 public offset!: bigint;
+	@t.uint64 public accessor offset!: bigint;
 
 	/**
 	 * Length of the continuation area.
 	 */
-	@t.uint64 public size!: bigint;
+	@t.uint64 public accessor size!: bigint;
 
 	public entries(): SystemUseEntry[] {
 		this._entries ||= constructSystemUseEntries(this.buffer, Number(this.extent * 2048n + this.offset), this.size);
@@ -82,41 +75,41 @@ export class CEEntry extends SystemUseEntry {
 /**
  * Padding entry.
  */
-@struct()
+@struct(packed)
 export class PDEntry extends SystemUseEntry {}
 
 /**
  * Identifies that SUSP is in-use.
  */
-@struct()
+@struct(packed)
 export class SPEntry extends SystemUseEntry {
-	@t.uint8(2) public magic!: Tuple<number, 2>;
+	@t.uint8(2) public accessor magic!: Tuple<number, 2>;
 
 	public checkMagic(): boolean {
 		return this.magic[0] == 190 && this.magic[1] == 239;
 	}
 
-	@t.uint8 public skip!: number;
+	@t.uint8 public accessor skip!: number;
 }
 
 /**
  * Identifies the end of the SUSP entries.
  */
-@struct()
+@struct(packed)
 export class STEntry extends SystemUseEntry {}
 
 /**
  * Specifies system-specific extensions to SUSP.
  */
-@struct()
+@struct(packed)
 export class EREntry extends SystemUseEntry {
-	@t.uint8 public idLength!: number;
+	@t.uint8 public accessor idLength!: number;
 
-	@t.uint8 public descriptorLength!: number;
+	@t.uint8 public accessor descriptorLength!: number;
 
-	@t.uint8 public sourceLength!: number;
+	@t.uint8 public accessor sourceLength!: number;
 
-	@t.uint8 public extensionVersion!: number;
+	@t.uint8 public accessor extensionVersion!: number;
 
 	public get extensionIdentifier(): string {
 		return decodeUTF8(new Uint8Array(this.buffer, this.byteOffset + 8, this.idLength));
@@ -131,50 +124,50 @@ export class EREntry extends SystemUseEntry {
 	}
 }
 
-@struct()
+@struct(packed)
 export class ESEntry extends SystemUseEntry {
-	@t.uint8 public extensionSequence!: number;
+	@t.uint8 public accessor extensionSequence!: number;
 }
 
 /**
  * RockRidge: Marks that RockRidge is in use
  * Note: Deprecated in the spec
  */
-@struct()
+@struct(packed)
 export class RREntry extends SystemUseEntry {}
 
 /**
  * RockRidge: Records POSIX file attributes.
  */
-@struct()
+@struct(packed)
 export class PXEntry extends SystemUseEntry {
-	@t.uint64 public mode!: bigint;
+	@t.uint64 public accessor mode!: bigint;
 
-	@t.uint64 public nlinks!: bigint;
+	@t.uint64 public accessor nlinks!: bigint;
 
-	@t.uint64 public uid!: bigint;
+	@t.uint64 public accessor uid!: bigint;
 
-	@t.uint64 public gid!: bigint;
+	@t.uint64 public accessor gid!: bigint;
 
-	@t.uint64 public inode!: bigint;
+	@t.uint64 public accessor inode!: bigint;
 }
 
 /**
  * RockRidge: Records POSIX device number.
  */
-@struct()
+@struct(packed)
 export class PNEntry extends SystemUseEntry {
-	@t.uint64 public dev_high!: bigint;
+	@t.uint64 public accessor dev_high!: bigint;
 
-	@t.uint64 public dev_low!: bigint;
+	@t.uint64 public accessor dev_low!: bigint;
 }
 
 /**
  * RockRidge: Records symbolic link
  */
-@struct()
+@struct(packed)
 export class SLEntry extends SystemUseEntry {
-	@t.uint8 public flags!: number;
+	@t.uint8 public accessor flags!: number;
 
 	public get continueFlag(): number {
 		return this.flags & 1;
@@ -201,9 +194,9 @@ export const enum NMFlags {
 /**
  * RockRidge: Records alternate file name
  */
-@struct()
+@struct(packed)
 export class NMEntry extends SystemUseEntry {
-	@t.uint8 public flags!: NMFlags;
+	@t.uint8 public accessor flags!: NMFlags;
 
 	public name(getString: (data: Uint8Array) => string): string {
 		return getString(new Uint8Array(this.buffer, this.byteOffset + 5, this.length));
@@ -213,23 +206,23 @@ export class NMEntry extends SystemUseEntry {
 /**
  * RockRidge: Records child link
  */
-@struct()
+@struct(packed)
 export class CLEntry extends SystemUseEntry {
-	@t.uint32 public childDirectoryLba!: number;
+	@t.uint32 public accessor childDirectoryLba!: number;
 }
 
 /**
  * RockRidge: Records parent link.
  */
-@struct()
+@struct(packed)
 export class PLEntry extends SystemUseEntry {
-	@t.uint32 public parentDirectoryLba!: number;
+	@t.uint32 public accessor parentDirectoryLba!: number;
 }
 
 /**
  * RockRidge: Records relocated directory.
  */
-@struct()
+@struct(packed)
 export class REEntry extends SystemUseEntry {}
 
 export const enum TFFlag {
@@ -246,9 +239,9 @@ export const enum TFFlag {
 /**
  * RockRidge: Records file timestamps
  */
-@struct()
+@struct(packed)
 export class TFEntry extends SystemUseEntry {
-	@t.uint8 public flags!: number;
+	@t.uint8 public accessor flags!: number;
 
 	private _getDate(kind: TFFlag): Date | undefined {
 		if (!(this.flags & kind)) {
@@ -263,8 +256,7 @@ export class TFEntry extends SystemUseEntry {
 
 		const _Date = this.flags & TFFlag.LONG_FORM ? LongFormDate : ShortFormDate;
 		const offset = 5 + index * sizeof(_Date);
-		const date = new _Date();
-		deserialize(date, new Uint8Array(this.buffer, this.byteOffset + offset, sizeof(_Date)));
+		const date = new _Date(this.buffer, this.byteOffset + offset, sizeof(_Date));
 		return date.date;
 	}
 
@@ -297,11 +289,11 @@ export class TFEntry extends SystemUseEntry {
  * RockRidge: File data in sparse format.
  */
 export class SFEntry extends SystemUseEntry {
-	@t.uint64 public virtualSizeHigh!: bigint;
+	@t.uint64 public accessor virtualSizeHigh!: bigint;
 
-	@t.uint64 public virtualSizeLow!: bigint;
+	@t.uint64 public accessor virtualSizeLow!: bigint;
 
-	@t.uint8 public tableDepth!: number;
+	@t.uint8 public accessor tableDepth!: number;
 }
 
 const signatureMap = {

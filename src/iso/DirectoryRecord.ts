@@ -1,45 +1,32 @@
-import { Errno, ErrnoError, log } from '@zenfs/core';
-import { deserialize, member, memoize, sizeof, struct, types as t } from 'utilium';
+import { withErrno, log } from 'kerium';
+import { field, packed, sizeof, struct, types as t } from 'memium';
+import { memoize } from 'utilium';
 import { Directory } from './Directory.js';
 import { SLComponentFlags } from './SLComponentRecord.js';
 import type { SystemUseEntry } from './entries.js';
 import { CLEntry, NMEntry, NMFlags, SLEntry, constructSystemUseEntries } from './entries.js';
 import { ShortFormDate, FileFlags } from './misc.js';
+import { BufferView } from 'utilium/buffer.js';
 
-@struct()
-export class DirectoryRecord {
-	protected _view?: DataView;
-
+@struct(packed)
+export class DirectoryRecord<T extends ArrayBufferLike = ArrayBufferLike> extends BufferView<T> {
 	/**
 	 * @internal
 	 */
 	_kind?: string;
 
-	public constructor(
-		public readonly buffer?: ArrayBufferLike,
-		public readonly byteOffset?: number,
-		/**
-		 * Offset at which system use entries begin. Set to -1 if not enabled.
-		 * @internal
-		 */
-		public rockRidgeOffset: number = -1
-	) {
-		if (buffer && byteOffset) {
-			deserialize(this, new Uint8Array(buffer, byteOffset));
-			this._view = new DataView(buffer);
-		}
-	}
+	public rockRidgeOffset: number = -1;
 
 	public get hasRockRidge(): boolean {
 		return this.rockRidgeOffset > -1;
 	}
 
-	@t.uint8 public length!: number;
+	@t.uint8 public accessor length!: number;
 
-	@t.uint8 public extendedAttributeRecordLength!: number;
+	@t.uint8 public accessor extendedAttributeRecordLength!: number;
 
-	@t.uint32 protected _lba!: number;
-	@t.uint32 protected _lbaBE!: number;
+	@t.uint32 protected accessor _lba!: number;
+	@t.uint32 protected accessor _lbaBE!: number;
 
 	public get lba(): number {
 		return this._lba * 2048;
@@ -47,32 +34,32 @@ export class DirectoryRecord {
 
 	public set lba(value: number) {
 		if (!Number.isInteger(value / 2048)) {
-			throw new ErrnoError(Errno.EINVAL, 'Invalid LBA value');
+			throw withErrno('EINVAL', 'Invalid LBA value');
 		}
 		this._lba = value / 2048;
 	}
 
-	@t.uint32 public dataLength!: number;
-	@t.uint32 protected dataLengthBE!: number;
+	@t.uint32 public accessor dataLength!: number;
+	@t.uint32 protected accessor dataLengthBE!: number;
 
-	@member(ShortFormDate) protected date: ShortFormDate = new ShortFormDate();
+	@field(ShortFormDate) protected accessor date!: ShortFormDate;
 
 	public get recordingDate(): Date {
 		return this.date.date;
 	}
 
-	@t.uint8 public fileFlags!: number;
+	@t.uint8 public accessor fileFlags!: number;
 
-	@t.uint8 public fileUnitSize!: number;
+	@t.uint8 public accessor fileUnitSize!: number;
 
-	@t.uint8 public interleaveGapSize!: number;
+	@t.uint8 public accessor interleaveGapSize!: number;
 
-	@t.uint16 public volumeSequenceNumber!: number;
-	@t.uint16 protected volumeSequenceNumberBE!: number;
+	@t.uint16 public accessor volumeSequenceNumber!: number;
+	@t.uint16 protected accessor volumeSequenceNumberBE!: number;
 
-	@t.uint8 protected identifierLength!: number;
+	@t.uint8 protected accessor identifierLength!: number;
 
-	@t.char('identifierLength') protected _identifier = new Uint8Array(256); // Reasonable upper limit?
+	@t.char(0, { countedBy: 'identifierLength' }) protected accessor _identifier = new Uint8Array(256); // Reasonable upper limit?
 
 	public get identifier(): string {
 		return this._decode(this._identifier.slice(0, this.identifierLength));
@@ -148,21 +135,21 @@ export class DirectoryRecord {
 
 	@memoize
 	public get file(): Uint8Array {
-		if (!this.buffer) throw log.err(ErrnoError.With('ENODATA', undefined, 'read'));
-		if (this.isDirectory()) throw log.err(ErrnoError.With('EISDIR', undefined, 'read'));
+		if (!this.buffer) throw log.err(withErrno('ENODATA'));
+		if (this.isDirectory()) throw log.err(withErrno('EISDIR'));
 		return new Uint8Array(this.buffer, this.lba, this.dataLength);
 	}
 
 	@memoize
 	public get directory(): Directory {
-		if (!this.buffer) throw log.err(ErrnoError.With('ENODATA', undefined, 'read'));
-		if (!this.isDirectory()) throw log.err(ErrnoError.With('ENOTDIR', undefined, 'read'));
+		if (!this.buffer) throw log.err(withErrno('ENODATA'));
+		if (!this.isDirectory()) throw log.err(withErrno('ENOTDIR'));
 		return new Directory(this);
 	}
 
 	@memoize
 	public get suEntries(): SystemUseEntry[] {
-		if (!this.buffer) throw log.err(ErrnoError.With('ENODATA', undefined, 'read'));
+		if (!this.buffer) throw log.err(withErrno('ENODATA'));
 		let i = sizeof(this as any);
 		if (i % 2 === 1) i++; // Skip padding fields.
 		i += this.rockRidgeOffset;
@@ -171,7 +158,7 @@ export class DirectoryRecord {
 
 	@memoize
 	protected get string(): string {
-		if (!this.buffer) throw log.err(ErrnoError.With('ENODATA', undefined, 'read'));
+		if (!this.buffer) throw log.err(withErrno('ENODATA'));
 		return this._decode(new Uint8Array(this.buffer, this.byteOffset));
 	}
 
