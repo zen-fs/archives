@@ -1,5 +1,5 @@
 import { withErrno, log } from 'kerium';
-import { field, packed, sizeof, struct, types as t } from 'memium';
+import { field, offsetof, packed, sizeof, struct, types as t, type StructArray } from 'memium';
 import { memoize } from 'utilium';
 import { Directory } from './Directory.js';
 import { SLComponentFlags } from './SLComponentRecord.js';
@@ -59,10 +59,10 @@ export class DirectoryRecord<T extends ArrayBufferLike = ArrayBufferLike> extend
 
 	@t.uint8 protected accessor identifierLength!: number;
 
-	@t.char(0, { countedBy: 'identifierLength' }) protected accessor _identifier = new Uint8Array(256); // Reasonable upper limit?
+	@t.char(0, { countedBy: 'identifierLength' }) protected accessor _identifier!: StructArray<number>;
 
 	public get identifier(): string {
-		return this._decode(this._identifier.slice(0, this.identifierLength));
+		return this._decode(new Uint8Array(this.buffer, this.byteOffset + offsetof(this, '_identifier'), this.identifierLength));
 	}
 
 	@memoize
