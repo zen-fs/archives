@@ -10,6 +10,7 @@ export const enum SLComponentFlags {
 
 @struct(packed)
 export class SLComponentRecord extends BufferView {
+	static readonly name = 'SLComponentRecord';
 	@t.uint8 public accessor flags!: SLComponentFlags;
 
 	@t.uint8 public accessor componentLength!: number;

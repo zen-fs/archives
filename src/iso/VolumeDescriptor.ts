@@ -33,6 +33,7 @@ export class VolumeDescriptor<T extends ArrayBufferLike = ArrayBufferLike> exten
  */
 @struct(packed)
 export class PrimaryVolumeDescriptor extends VolumeDescriptor {
+	static readonly name = 'PrimaryVolumeDescriptor';
 	public constructor(
 		/**
 		 * The name of the volume descriptor type, either 'ISO9660' or 'Joliet'.

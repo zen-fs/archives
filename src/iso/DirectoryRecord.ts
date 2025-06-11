@@ -10,6 +10,8 @@ import { BufferView } from 'utilium/buffer.js';
 
 @struct(packed)
 export class DirectoryRecord<T extends ArrayBufferLike = ArrayBufferLike> extends BufferView<T> {
+	static readonly name = 'DirectoryRecord';
+
 	/**
 	 * @internal
 	 */
