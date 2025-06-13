@@ -31,9 +31,8 @@ export class VolumeDescriptor<T extends ArrayBufferLike = ArrayBufferLike> exten
  * Primary or supplementary volume descriptor.
  * Supplementary VDs are basically PVDs with some extra sauce, so we use the same struct for both.
  */
-@struct(packed)
+@struct(packed, { name: 'PrimaryVolumeDescriptor' })
 export class PrimaryVolumeDescriptor extends VolumeDescriptor {
-	static readonly name = 'PrimaryVolumeDescriptor';
 	public constructor(
 		/**
 		 * The name of the volume descriptor type, either 'ISO9660' or 'Joliet'.

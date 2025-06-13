@@ -8,10 +8,8 @@ import { CLEntry, NMEntry, NMFlags, SLEntry, constructSystemUseEntries } from '.
 import { ShortFormDate, FileFlags } from './misc.js';
 import { BufferView } from 'utilium/buffer.js';
 
-@struct(packed)
+@struct(packed, { name: 'DirectoryRecord' })
 export class DirectoryRecord<T extends ArrayBufferLike = ArrayBufferLike> extends BufferView<T> {
-	static readonly name = 'DirectoryRecord';
-
 	/**
 	 * @internal
 	 */
