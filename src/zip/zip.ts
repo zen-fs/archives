@@ -1,7 +1,8 @@
 import { Inode } from '@zenfs/core';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
 import { log, withErrno } from 'kerium';
-import { packed, sizeof, struct, types as t } from 'memium';
+import { sizeof } from 'memium';
+import { $from, struct, types as t } from 'memium/decorators';
 import { memoize } from 'utilium';
 import { CompressionMethod, decompressionMethods } from './compression.js';
 import { msdosDate, safeDecode } from './utils.js';
@@ -35,8 +36,8 @@ export enum AttributeCompat {
 /**
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.7
  */
-@struct(packed, { name: 'LocalFileHeader' })
-export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Uint8Array<TBuffer> {
+@struct.packed('LocalFileHeader')
+export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	@t.uint32 public accessor signature!: number;
 
 	public check() {
@@ -140,8 +141,8 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
  * Archive extra data record
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.11
  */
-@struct(packed, { name: 'ExtraDataRecord' })
-export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Uint8Array<TBuffer> {
+@struct.packed('ExtraDataRecord')
+export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	@t.uint32 public accessor signature!: number;
 
 	public check() {
@@ -166,8 +167,8 @@ export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
  * This is a file metadata entry inside the "central directory".
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.12
  */
-@struct(packed, { name: 'FileEntry' })
-export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Uint8Array<TBuffer> {
+@struct.packed('FileEntry')
+export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	@t.uint32 public accessor signature!: number;
 
 	public check() {
@@ -402,8 +403,8 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Ui
  * Digital signature
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.13
  */
-@struct(packed, { name: 'DigitalSignature' })
-export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Uint8Array<TBuffer> {
+@struct.packed('DigitalSignature')
+export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	@t.uint32 public accessor signature!: number;
 
 	public check() {
@@ -425,8 +426,8 @@ export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> ext
  * Internally, ZIP files have only a single directory: the "central directory".
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.16
  */
-@struct(packed, { name: 'Header' })
-export class Header<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Uint8Array<TBuffer> {
+@struct.packed('Header')
+export class Header<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	@t.uint32 public accessor signature!: number;
 
 	public check() {

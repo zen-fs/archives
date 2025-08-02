@@ -1,4 +1,4 @@
-import { packed, struct, types as t } from 'memium';
+import { struct, types as t } from 'memium/decorators';
 import { BufferView } from 'utilium/buffer.js';
 
 export const enum SLComponentFlags {
@@ -8,7 +8,7 @@ export const enum SLComponentFlags {
 	ROOT = 1 << 3,
 }
 
-@struct(packed, { name: 'SLComponentRecord' })
+@struct.packed('SLComponentRecord')
 export class SLComponentRecord extends BufferView {
 	@t.uint8 public accessor flags!: SLComponentFlags;
 

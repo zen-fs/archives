@@ -1,10 +1,10 @@
 import { withErrno } from 'kerium';
-import { field, packed, struct, types as t } from 'memium';
+import { $from, field, struct, types as t } from 'memium/decorators';
 import { _throw } from 'utilium';
+import { BufferView } from 'utilium/buffer.js';
 import { DirectoryRecord } from './DirectoryRecord.js';
 import { EREntry, RREntry, SPEntry } from './entries.js';
 import { LongFormDate } from './misc.js';
-import { BufferView } from 'utilium/buffer.js';
 
 const rockRidgeIdentifier = 'IEEE_P1282';
 
@@ -16,8 +16,8 @@ export const enum VolumeDescriptorType {
 	SetTerminator = 255,
 }
 
-@struct(packed)
-export class VolumeDescriptor<T extends ArrayBufferLike = ArrayBufferLike> extends BufferView<T> {
+@struct.packed('VolumeDescriptor')
+export class VolumeDescriptor<T extends ArrayBufferLike = ArrayBufferLike> extends $from(BufferView)<T> {
 	@t.uint8 public accessor type!: VolumeDescriptorType;
 
 	@t.char(5) public accessor standardIdentifier: string = '';
@@ -31,7 +31,7 @@ export class VolumeDescriptor<T extends ArrayBufferLike = ArrayBufferLike> exten
  * Primary or supplementary volume descriptor.
  * Supplementary VDs are basically PVDs with some extra sauce, so we use the same struct for both.
  */
-@struct(packed, { name: 'PrimaryVolumeDescriptor' })
+@struct.packed('PrimaryVolumeDescriptor')
 export class PrimaryVolumeDescriptor extends VolumeDescriptor {
 	public constructor(
 		/**

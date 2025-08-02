@@ -1,15 +1,16 @@
-import { withErrno, log } from 'kerium';
-import { field, offsetof, packed, sizeof, struct, types as t, type StructArray } from 'memium';
+import { log, withErrno } from 'kerium';
+import { offsetof, sizeof } from 'memium';
+import { $from, field, struct, types as t } from 'memium/decorators';
 import { memoize } from 'utilium';
+import { BufferView } from 'utilium/buffer.js';
 import { Directory } from './Directory.js';
 import { SLComponentFlags } from './SLComponentRecord.js';
 import type { SystemUseEntry } from './entries.js';
 import { CLEntry, NMEntry, NMFlags, SLEntry, constructSystemUseEntries } from './entries.js';
-import { ShortFormDate, FileFlags } from './misc.js';
-import { BufferView } from 'utilium/buffer.js';
+import { FileFlags, ShortFormDate } from './misc.js';
 
-@struct(packed, { name: 'DirectoryRecord' })
-export class DirectoryRecord<T extends ArrayBufferLike = ArrayBufferLike> extends BufferView<T> {
+@struct.packed('DirectoryRecord')
+export class DirectoryRecord<T extends ArrayBufferLike = ArrayBufferLike> extends $from(BufferView)<T> {
 	/**
 	 * @internal
 	 */
@@ -59,7 +60,7 @@ export class DirectoryRecord<T extends ArrayBufferLike = ArrayBufferLike> extend
 
 	@t.uint8 protected accessor identifierLength!: number;
 
-	@t.char(0, { countedBy: 'identifierLength' }) protected accessor _identifier!: StructArray<number>;
+	@t.char(0, { countedBy: 'identifierLength' }) protected accessor _identifier!: Uint8Array;
 
 	public get identifier(): string {
 		return this._decode(new Uint8Array(this.buffer, this.byteOffset + offsetof(this, '_identifier'), this.identifierLength));

@@ -1,9 +1,9 @@
-import { packed, struct, types as t } from 'memium';
+import { $from, struct, types as t } from 'memium/decorators';
 import { memoize } from 'utilium';
 import { BufferView } from 'utilium/buffer.js';
 
-@struct(packed, { name: 'LongFormDate' })
-export class LongFormDate<T extends ArrayBufferLike = ArrayBuffer> extends BufferView<T> {
+@struct.packed('LongFormDate')
+export class LongFormDate<T extends ArrayBufferLike = ArrayBuffer> extends $from(BufferView)<T> {
 	@t.char(4) protected accessor _year: string = '';
 	public get year(): number {
 		return parseInt(this._year);
@@ -67,8 +67,8 @@ export class LongFormDate<T extends ArrayBufferLike = ArrayBuffer> extends Buffe
 	}
 }
 
-@struct(packed, { name: 'ShortFormDate' })
-export class ShortFormDate<T extends ArrayBufferLike = ArrayBuffer> extends Uint8Array<T> {
+@struct.packed('ShortFormDate')
+export class ShortFormDate<T extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<T> {
 	/**
 	 * Years since 1990
 	 * @todo This may not be the correct size
