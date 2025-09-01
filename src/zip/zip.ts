@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 import { Inode } from '@zenfs/core';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
 import { log, withErrno } from 'kerium';

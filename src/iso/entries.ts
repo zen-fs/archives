@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 import { sizeof } from 'memium';
 import { struct, types as t } from 'memium/decorators';
 import { decodeUTF8, type Tuple } from 'utilium';

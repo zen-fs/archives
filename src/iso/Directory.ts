@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 import { DirectoryRecord } from './DirectoryRecord.js';
 import { CLEntry, REEntry } from './entries.js';
 import { FileFlags } from './misc.js';

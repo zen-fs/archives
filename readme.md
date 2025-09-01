@@ -11,6 +11,15 @@ For more information, see the [API documentation](https://zenfs.dev/archives).
 
 Please read the ZenFS core documentation!
 
+## Installation
+
+> [!IMPORTANT]
+> This project is licensed under the LGPL (v3+).
+
+```sh
+npm install @zenfs/archives
+```
+
 ## Usage
 
 The easiest way to get started is by looking at these examples

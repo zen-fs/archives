@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 import { FileSystem, Inode, type UsageInfo } from '@zenfs/core';
 import { log, withErrno } from 'kerium';
 import type { Backend } from '@zenfs/core/backends/backend.js';

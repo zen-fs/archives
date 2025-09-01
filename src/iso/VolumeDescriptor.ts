@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 import { withErrno } from 'kerium';
 import { $from, field, struct, types as t } from 'memium/decorators';
 import { _throw } from 'utilium';

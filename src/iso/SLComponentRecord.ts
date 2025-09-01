@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 import { struct, types as t } from 'memium/decorators';
 import { BufferView } from 'utilium/buffer.js';
 
