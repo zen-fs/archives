@@ -3,9 +3,9 @@ import { configureSingle, fs } from '@zenfs/core';
 // @ts-expect-error 7016
 import { setupLogs } from '@zenfs/core/tests/logs.js';
 import assert from 'node:assert/strict';
-import { fstatSync, openSync, readFileSync, readSync } from 'node:fs';
+import { fstatSync, readFileSync, readSync } from 'node:fs';
 import { open } from 'node:fs/promises';
-import { after, suite, test } from 'node:test';
+import { suite, test } from 'node:test';
 
 setupLogs();
 
