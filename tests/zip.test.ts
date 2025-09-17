@@ -3,7 +3,7 @@ import { configureSingle, fs } from '@zenfs/core';
 // @ts-expect-error 7016
 import { setupLogs } from '@zenfs/core/tests/logs.js';
 import assert from 'node:assert/strict';
-import { openSync, readFileSync, readSync, statSync } from 'node:fs';
+import { fstatSync, openSync, readFileSync, readSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { suite, test } from 'node:test';
 
@@ -41,10 +41,12 @@ suite('Basic ZIP operations', () => {
 	_runTests();
 });
 
-suite('ZIP Streaming', () => {
+suite('ZIP Streaming', async () => {
+	await using handle = await open(import.meta.dirname + '/files/data.zip');
+
 	test('Configure', async () => {
-		const stream = (await open(import.meta.dirname + '/files/data.zip')).readableWebStream() as ReadableStream;
-		const { size } = statSync(import.meta.dirname + '/files/data.zip');
+		const stream = handle.readableWebStream() as ReadableStream;
+		const { size } = await handle.stat();
 		await configureSingle({ backend: Zip, data: fromStream(stream, size) });
 	});
 
@@ -54,7 +56,7 @@ suite('ZIP Streaming', () => {
 suite('Custom data source', () => {
 	test('Configure', async () => {
 		const fd = openSync(import.meta.dirname + '/files/data.zip', 'r');
-		const { size } = statSync(import.meta.dirname + '/files/data.zip');
+		const { size } = fstatSync(fd);
 
 		await configureSingle({
 			backend: Zip,
