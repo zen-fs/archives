@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 import { decodeUTF8 } from 'utilium';
+import type { ZipDataSource } from './fs.js';
 
 /**
  * Converts the input `time` and `date` in MS-DOS format into a `Date`.
@@ -163,12 +164,12 @@ export const extendedASCIIChars = [
  * Safely decodes the string from a buffer.
  * @hidden
  */
-export function safeDecode(buffer: Uint8Array, utf8: boolean, start: number, length: number): string {
+export async function safeDecode(source: ZipDataSource<any>, utf8: boolean, start: number, length: number): Promise<string> {
 	if (length === 0) {
 		return '';
 	}
 
-	const uintArray = buffer.subarray(start, start + length);
+	const uintArray = await source.get(start, length);
 	if (utf8) {
 		return decodeUTF8(uintArray);
 	} else {

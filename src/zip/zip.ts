@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-import { Inode } from '@zenfs/core';
-import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
 import { log, withErrno } from 'kerium';
 import { sizeof } from 'memium';
 import { $from, struct, types as t } from 'memium/decorators';
-import { memoize } from 'utilium';
 import { CompressionMethod, decompressionMethods } from './compression.js';
 import type { ZipDataSource } from './fs.js';
 import { msdosDate, safeDecode } from './utils.js';
@@ -40,6 +37,8 @@ export enum AttributeCompat {
  */
 @struct.packed('LocalFileHeader')
 export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	_source!: ZipDataSource<TBuffer>;
+
 	@t.uint32 public accessor signature!: number;
 
 	public check() {
@@ -117,25 +116,32 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 	 * @see CentralDirectory.fileName
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.17
 	 */
-	public get name(): string {
-		return safeDecode(this, this.useUTF8, 30, this.nameLength);
-	}
+	name!: string;
 
 	/**
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public get extra(): Uint8Array {
-		const start = 30 + this.nameLength;
-		return this.subarray(start, start + this.extraLength);
-	}
+	extra!: Uint8Array;
 
 	public get size(): number {
-		return 30 + this.nameLength + this.extraLength;
+		return LocalFileHeader.size + this.nameLength + this.extraLength;
 	}
 
 	public get useUTF8(): boolean {
 		return !!(this.flags & (1 << 11));
+	}
+
+	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<LocalFileHeader<TBuffer>> {
+		const entryData = await source.get(offset, LocalFileHeader.size);
+		const cd = new LocalFileHeader<TBuffer>(entryData.buffer, entryData.byteOffset);
+		cd._source = source;
+		offset += LocalFileHeader.size;
+		cd.name = await safeDecode(source, cd.useUTF8, offset, cd.nameLength);
+		offset += cd.nameLength;
+		cd.extra = await source.get(offset, cd.extraLength);
+		offset += cd.extraLength;
+		return cd;
 	}
 }
 
@@ -145,6 +151,9 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
  */
 @struct.packed('ExtraDataRecord')
 export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	/** @internal @hidden */
+	_source!: ZipDataSource<TBuffer>;
+
 	@t.uint32 public accessor signature!: number;
 
 	public check() {
@@ -159,8 +168,15 @@ export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public get extraField(): Uint8Array {
-		return this.subarray(8, 8 + this.length);
+	public extraField!: Uint8Array;
+
+	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<ExtraDataRecord<TBuffer>> {
+		const entryData = await source.get(offset, ExtraDataRecord.size);
+		const record = new ExtraDataRecord<TBuffer>(entryData.buffer, entryData.byteOffset);
+		record._source = source;
+		offset += ExtraDataRecord.size;
+		record.extraField = await source.get(offset, record.length);
+		return record;
 	}
 }
 
@@ -171,6 +187,9 @@ export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
  */
 @struct.packed('FileEntry')
 export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	/** @internal @hidden */
+	_source!: ZipDataSource<TBuffer>;
+
 	@t.uint32 public accessor signature!: number;
 
 	public check() {
@@ -309,28 +328,19 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	 * To avoid seeking all over the file to recover the known-good filenames from file headers, we simply convert '\' to '/' here.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.17
 	 */
-	@memoize
-	public get name(): string {
-		return safeDecode(this, this.useUTF8, sizeof(FileEntry), this.nameLength).replace(/\\/g, '/');
-	}
+	name!: string;
 
 	/**
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public get extra(): Uint8Array {
-		const offset = 44 + this.nameLength;
-		return this.subarray(offset, offset + this.extraLength);
-	}
+	extra!: Uint8Array;
 
 	/**
 	 * The comment for this file
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.18
 	 */
-	@memoize
-	public get comment(): string {
-		return safeDecode(this, this.useUTF8, sizeof(FileEntry) + this.nameLength + this.extraLength, this.commentLength);
-	}
+	comment!: string;
 
 	/**
 	 * The total size of the this entry
@@ -342,7 +352,6 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	/**
 	 * Whether this entry is a directory
 	 */
-	@memoize
 	public get isDirectory(): boolean {
 		/* 
 			NOTE: This assumes that the zip file implementation uses the lower byte
@@ -351,7 +360,7 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 			According to the spec, the layout of external attributes is platform-dependent.
 			If that fails, we also check if the name of the file ends in '/'.
 		*/
-		return !!(this.externalAttributes & 16) || this.name.endsWith('/');
+		return !!(this.externalAttributes & 16) || this.name.at(-1) == '/';
 	}
 
 	/**
@@ -361,43 +370,45 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 		return !this.isDirectory;
 	}
 
-	protected _decompress(): Uint8Array {
+	async loadContents(): Promise<void> {
 		// Get the local header before we can figure out where the actual compressed data starts.
-		const { compressionMethod, size, name } = new LocalFileHeader(this.buffer, this.headerRelativeOffset);
+		const rawLocalHeader = await this._source.get(this.headerRelativeOffset, sizeof(LocalFileHeader));
+		const { compressionMethod, size, name } = new LocalFileHeader(rawLocalHeader.buffer, rawLocalHeader.byteOffset);
 
-		const data = new Uint8Array(this.buffer, this.headerRelativeOffset + size);
+		const data = await this._source.get(this.headerRelativeOffset + size, this.compressedSize);
 		// Check the compression
 		const decompress = decompressionMethods[compressionMethod];
 		if (typeof decompress != 'function') {
 			const mname: string = compressionMethod in CompressionMethod ? CompressionMethod[compressionMethod] : compressionMethod.toString();
 			throw withErrno('EINVAL', `Invalid compression method on file "${name}": ${mname}`);
 		}
-		return decompress(data, this.compressedSize, this.uncompressedSize, this.flag);
+		this.contents = decompress(data, this.compressedSize, this.uncompressedSize, this.flag);
 	}
 
 	/**
 	 * Gets the file data, and decompresses it if needed.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.8
 	 */
-	@memoize
-	public get contents(): Uint8Array {
-		return this._decompress();
-	}
+	contents!: Uint8Array;
 
 	/**
 	 * @deprecated Use `contents`
 	 */
-	@memoize
 	public get data(): Uint8Array {
-		return this._decompress();
+		return this.contents;
 	}
 
-	public get inode(): Inode {
-		return new Inode({
-			mode: 0o555 | (this.isDirectory ? S_IFDIR : S_IFREG),
-			size: this.uncompressedSize,
-			mtimeMs: this.lastModified.getTime(),
-		});
+	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<FileEntry<TBuffer>> {
+		const entryData = await source.get(offset, FileEntry.size);
+		const cd = new FileEntry<TBuffer>(entryData.buffer, entryData.byteOffset);
+		cd._source = source;
+		offset += FileEntry.size;
+		cd.name = await safeDecode(source, cd.useUTF8, offset, cd.nameLength);
+		offset += cd.nameLength;
+		cd.extra = await source.get(offset, cd.extraLength);
+		offset += cd.extraLength;
+		cd.comment = await safeDecode(source, cd.useUTF8, offset, cd.commentLength);
+		return cd;
 	}
 }
 
@@ -407,6 +418,9 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
  */
 @struct.packed('DigitalSignature')
 export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	/** @internal @hidden */
+	_source!: ZipDataSource<TBuffer>;
+
 	@t.uint32 public accessor signature!: number;
 
 	public check() {
@@ -417,8 +431,15 @@ export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> ext
 
 	@t.uint16 public accessor size!: number;
 
-	public get signatureData(): Uint8Array {
-		return this.subarray(6, 6 + this.size);
+	public signatureData!: Uint8Array;
+
+	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<DigitalSignature<TBuffer>> {
+		const data = await source.get(offset, DigitalSignature.size);
+		const ds = new DigitalSignature<TBuffer>(data.buffer, data.byteOffset);
+		ds._source = source;
+		offset += DigitalSignature.size;
+		ds.signatureData = await source.get(offset, ds.size);
+		return ds;
 	}
 }
 
@@ -430,6 +451,9 @@ export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> ext
  */
 @struct.packed('Header')
 export class Header<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	/** @internal @hidden */
+	_source!: ZipDataSource<TBuffer>;
+
 	@t.uint32 public accessor signature!: number;
 
 	public check() {
@@ -484,10 +508,7 @@ export class Header<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from
 	 * Assuming the content is UTF-8 encoded. The specification doesn't specify.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.26
 	 */
-	@memoize
-	public get comment(): string {
-		return safeDecode(this, true, 22, this.commentLength);
-	}
+	comment!: string;
 }
 
 /**
@@ -512,7 +533,10 @@ export async function computeEOCD<T extends ArrayBufferLike = ArrayBuffer>(sourc
 		// The magic number is the EOCD Signature
 		if (sig === 0x6054b50) {
 			log.debug('zipfs: found End of Central Directory signature at 0x' + offset.toString(16));
-			return new Header<T>(data.buffer, data.byteOffset);
+			const header = new Header<T>(data.buffer, data.byteOffset);
+			header._source = source;
+			header.comment = await safeDecode(source, true, offset + Header.size, header.commentLength);
+			return header;
 		}
 	}
 	throw log.err(withErrno('EINVAL', 'zipfs: could not locate End of Central Directory signature'));

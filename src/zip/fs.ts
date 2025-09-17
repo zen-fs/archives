@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-import { FileSystem, Inode, Sync, type UsageInfo } from '@zenfs/core';
+import { FileSystem, Inode, type UsageInfo } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { Readonly } from '@zenfs/core/mixins/readonly.js';
 import { parse } from '@zenfs/core/path.js';
-import { S_IFDIR } from '@zenfs/core/vfs/constants.js';
+import { S_IFDIR, S_IFREG } from '@zenfs/core/vfs/constants.js';
 import { withErrno } from 'kerium';
 import { err } from 'kerium/log';
 import { _throw } from 'utilium';
@@ -63,7 +63,7 @@ export interface ZipOptions<TBuffer extends ArrayBufferLike = ArrayBuffer> {
  *   - Stream it out to a location.
  *   This isn't that bad, so we might do this at a later date.
  */
-export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readonly(Sync(FileSystem)) {
+export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readonly(FileSystem) {
 	protected files: Map<string, FileEntry<TBuffer>> = new Map();
 	protected directories: Map<string, Set<string>> = new Map();
 
@@ -91,8 +91,9 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		const cdEnd = ptr + this.eocd.size;
 
 		while (ptr < cdEnd) {
-			const entryData = await this.data.get(ptr, FileEntry.size);
-			const cd = new FileEntry<TBuffer>(entryData.buffer, entryData.byteOffset);
+			const cd = await FileEntry.from<TBuffer>(this.data, ptr);
+
+			if (!this.lazy) await cd.loadContents();
 			/* 	Paths must be absolute,
 			yet zip file paths are always relative to the zip root.
 			So we prepend '/' and call it a day. */
@@ -132,7 +133,8 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 
 	public constructor(
 		public label: string,
-		protected data: ZipDataSource<TBuffer>
+		protected data: ZipDataSource<TBuffer>,
+		public readonly lazy: boolean = false
 	) {
 		super(0x207a6970, 'zipfs');
 	}
@@ -142,6 +144,10 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 			totalSpace: this.data.size,
 			freeSpace: 0,
 		};
+	}
+
+	public async stat(path: string): Promise<Inode> {
+		return this.statSync(path);
 	}
 
 	public statSync(path: string): Inode {
@@ -161,27 +167,54 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 
 		if (!entry) throw withErrno('ENOENT');
 
-		return entry.inode;
+		return new Inode({
+			mode: 0o555 | (entry.isDirectory ? S_IFDIR : S_IFREG),
+			size: entry.uncompressedSize,
+			mtimeMs: entry.lastModified.getTime(),
+		});
 	}
 
-	public readdirSync(path: string): string[] {
-		const inode = this.statSync(path);
-
+	public async readdir(path: string): Promise<string[]> {
+		const inode = await this.stat(path);
 		if (!(inode.mode & S_IFDIR)) throw withErrno('ENOTDIR');
 
 		const entries = this.directories.get(path);
-
 		if (!entries) throw withErrno('ENODATA');
 
 		return Array.from(entries);
 	}
 
+	public readdirSync(path: string): string[] {
+		const inode = this.statSync(path);
+		if (!(inode.mode & S_IFDIR)) throw withErrno('ENOTDIR');
+
+		const entries = this.directories.get(path);
+		if (!entries) throw withErrno('ENODATA');
+
+		return Array.from(entries);
+	}
+
+	public async read(path: string, buffer: Uint8Array, offset: number, end: number): Promise<void> {
+		if (this.directories.has(path)) throw withErrno('EISDIR');
+
+		const file = this.files.get(path) ?? _throw(withErrno('ENOENT'));
+
+		if (!file.contents) await file.loadContents();
+
+		buffer.set(file.contents.subarray(offset, end));
+	}
+
 	public readSync(path: string, buffer: Uint8Array, offset: number, end: number): void {
 		if (this.directories.has(path)) throw withErrno('EISDIR');
 
-		const { contents: data } = this.files.get(path) ?? _throw(withErrno('ENOENT'));
+		const file = this.files.get(path) ?? _throw(withErrno('ENOENT'));
 
-		buffer.set(data.subarray(offset, end));
+		if (!file.contents) {
+			void file.loadContents();
+			throw withErrno('EAGAIN');
+		}
+
+		buffer.set(file.contents.subarray(offset, end));
 	}
 }
 
@@ -278,8 +311,8 @@ const _Zip = {
 		return true;
 	},
 
-	create<TBuffer extends ArrayBufferLike = ArrayBuffer>({ name, data }: ZipOptions<TBuffer>): ZipFS<TBuffer> {
-		return new ZipFS<TBuffer>(name ?? '', getSource(data));
+	create<TBuffer extends ArrayBufferLike = ArrayBuffer>(opt: ZipOptions<TBuffer>): ZipFS<TBuffer> {
+		return new ZipFS<TBuffer>(opt.name ?? '', getSource(opt.data), opt.lazy);
 	},
 } satisfies Backend<ZipFS, ZipOptions>;
 type _Zip = typeof _Zip;
