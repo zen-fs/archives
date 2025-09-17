@@ -41,9 +41,9 @@ suite('Basic ZIP operations', () => {
 	_runTests();
 });
 
-suite('ZIP Streaming', async () => {
-	await using handle = await open(import.meta.dirname + '/files/data.zip');
+await using handle = await open(import.meta.dirname + '/files/data.zip');
 
+suite('ZIP Streaming', () => {
 	test('Configure', async () => {
 		const stream = handle.readableWebStream() as ReadableStream;
 		const { size } = await handle.stat();
@@ -55,8 +55,7 @@ suite('ZIP Streaming', async () => {
 
 suite('Custom data source', () => {
 	test('Configure', async () => {
-		const fd = openSync(import.meta.dirname + '/files/data.zip', 'r');
-		const { size } = fstatSync(fd);
+		const { size } = fstatSync(handle.fd);
 
 		await configureSingle({
 			backend: Zip,
@@ -64,7 +63,7 @@ suite('Custom data source', () => {
 				size,
 				get(offset, length) {
 					const data = new Uint8Array(length);
-					const read = readSync(fd, data, { position: offset, length });
+					const read = readSync(handle.fd, data, { position: offset, length });
 					assert.equal(read, length);
 					return data;
 				},
