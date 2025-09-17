@@ -6,6 +6,7 @@ import { sizeof } from 'memium';
 import { $from, struct, types as t } from 'memium/decorators';
 import { memoize } from 'utilium';
 import { CompressionMethod, decompressionMethods } from './compression.js';
+import type { ZipDataSource } from './fs.js';
 import { msdosDate, safeDecode } from './utils.js';
 
 /**
@@ -504,13 +505,14 @@ export class Header<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from
  *
  * There is no byte alignment on the comment
  */
-export function computeEOCD<T extends ArrayBufferLike = ArrayBuffer>(data: Uint8Array<T>): Header<T> {
-	const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-	for (let offset = data.byteLength - 22; offset > data.byteLength - 0xffff; offset--) {
-		// Magic number: EOCD Signature
-		if (view.getUint32(offset, true) === 0x6054b50) {
+export async function computeEOCD<T extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<T>): Promise<Header<T>> {
+	for (let offset = source.size - 22; offset > source.size - 0xffff; offset--) {
+		const data = await source.get(offset, 22);
+		const sig = (data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24)) >>> 0;
+		// The magic number is the EOCD Signature
+		if (sig === 0x6054b50) {
 			log.debug('zipfs: found End of Central Directory signature at 0x' + offset.toString(16));
-			return new Header<T>(data.buffer, data.byteOffset + offset);
+			return new Header<T>(data.buffer, data.byteOffset);
 		}
 	}
 	throw log.err(withErrno('EINVAL', 'zipfs: could not locate End of Central Directory signature'));
