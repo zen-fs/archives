@@ -5,7 +5,7 @@ import { setupLogs } from '@zenfs/core/tests/logs.js';
 import assert from 'node:assert/strict';
 import { fstatSync, openSync, readFileSync, readSync } from 'node:fs';
 import { open } from 'node:fs/promises';
-import { suite, test } from 'node:test';
+import { after, suite, test } from 'node:test';
 
 setupLogs();
 
@@ -41,7 +41,7 @@ suite('Basic ZIP operations', () => {
 	_runTests();
 });
 
-await using handle = await open(import.meta.dirname + '/files/data.zip');
+const handle = await open(import.meta.dirname + '/files/data.zip');
 
 suite('ZIP Streaming', () => {
 	test('Configure', async () => {
@@ -73,3 +73,5 @@ suite('Custom data source', () => {
 
 	_runTests();
 });
+
+after(async () => await handle.close());
