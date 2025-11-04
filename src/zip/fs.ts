@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 import { FileSystem, Inode, type InodeLike, type UsageInfo } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
+import type { CaseFold } from '@zenfs/core/internal/filesystem.js';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/constants';
 import { Readonly } from '@zenfs/core/mixins/readonly.js';
 import { parse } from '@zenfs/core/path';
@@ -36,6 +37,13 @@ export interface ZipOptions<TBuffer extends ArrayBufferLike = ArrayBuffer> {
 	 * Whether to wait to initialize entries
 	 */
 	lazy?: boolean;
+
+	/**
+	 * Case folding mode for file names (optional).
+	 * Can be 'lower', or 'upper'.
+	 * Default is undefined.
+	 */
+	caseFold?: CaseFold;
 }
 
 /**
@@ -68,6 +76,7 @@ export interface ZipOptions<TBuffer extends ArrayBufferLike = ArrayBuffer> {
 export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readonly(FileSystem) {
 	protected files: Map<string, FileEntry<TBuffer>> = new Map();
 	protected directories: Map<string, Set<string>> = new Map();
+	protected folded: Map<string, string> = new Map();
 
 	/**
 	 * Inodes for each path.
@@ -125,15 +134,17 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 				throw withErrno('EPERM', 'Unexpectedly encountered an absolute path in a zip file.');
 			}
 			// Strip the trailing '/' if it exists
-			const name = cd.name.endsWith('/') ? cd.name.slice(0, -1) : cd.name;
-			this.files.set('/' + name, cd);
+			const name = '/' + (cd.name.endsWith('/') ? cd.name.slice(0, -1) : cd.name);
+			this.files.set(this._caseFold(name, true), cd);
 			ptr += cd.$size;
 		}
 
 		// Parse directory entries
 		for (const entry of this.files.keys()) {
-			const { dir, base } = parse(entry);
+			const name = this.folded.get(entry) ?? entry;
+			let { dir, base } = parse(name);
 
+			dir = this._caseFold(dir, true);
 			if (!this.directories.has(dir)) {
 				this.directories.set(dir, new Set());
 			}
@@ -143,8 +154,10 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 
 		// Add subdirectories to their parent's entries
 		for (const entry of this.directories.keys()) {
-			const { dir, base } = parse(entry);
+			const name = this.folded.get(entry) ?? entry;
+			let { dir, base } = parse(name);
 
+			dir = this._caseFold(dir, true);
 			if (base == '') continue;
 
 			if (!this.directories.has(dir)) {
@@ -158,7 +171,8 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	public constructor(
 		public label: string,
 		protected data: ZipDataSource<TBuffer>,
-		public readonly lazy: boolean = false
+		public readonly lazy: boolean = false,
+		public readonly caseFold?: CaseFold
 	) {
 		super(0x207a6970, 'zipfs');
 	}
@@ -175,9 +189,10 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	}
 
 	public statSync(path: string): Inode {
+		const folded = this._caseFold(path);
 		// The EOCD/Header does not track directories, so it does not exist in `entries`
-		if (this.directories.has(path)) {
-			return this.inodeFor(path, () => ({
+		if (this.directories.has(folded)) {
+			return this.inodeFor(folded, () => ({
 				mode: 0o555 | S_IFDIR,
 				size: 4096,
 				mtimeMs: this._time,
@@ -187,11 +202,11 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 			}));
 		}
 
-		const entry = this.files.get(path);
+		const entry = this.files.get(folded);
 
 		if (!entry) throw withErrno('ENOENT');
 
-		return this.inodeFor(path, () => ({
+		return this.inodeFor(folded, () => ({
 			mode: 0o555 | (entry.isDirectory ? S_IFDIR : S_IFREG),
 			size: entry.uncompressedSize,
 			mtimeMs: entry.lastModified.getTime(),
@@ -202,26 +217,31 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		const inode = await this.stat(path);
 		if (!(inode.mode & S_IFDIR)) throw withErrno('ENOTDIR');
 
-		const entries = this.directories.get(path);
+		const entries = this.directories.get(this._caseFold(path));
 		if (!entries) throw withErrno('ENODATA');
 
-		return Array.from(entries);
+		return Array.from(entries).map(entry => {
+			return this.folded.get(entry) ?? entry;
+		});
 	}
 
 	public readdirSync(path: string): string[] {
 		const inode = this.statSync(path);
 		if (!(inode.mode & S_IFDIR)) throw withErrno('ENOTDIR');
 
-		const entries = this.directories.get(path);
+		const entries = this.directories.get(this._caseFold(path));
 		if (!entries) throw withErrno('ENODATA');
 
-		return Array.from(entries);
+		return Array.from(entries).map(entry => {
+			return this.folded.get(entry) ?? entry;
+		});
 	}
 
 	public async read(path: string, buffer: Uint8Array, offset: number, end: number): Promise<void> {
-		if (this.directories.has(path)) throw withErrno('EISDIR');
+		const folded = this._caseFold(path);
+		if (this.directories.has(folded)) throw withErrno('EISDIR');
 
-		const file = this.files.get(path) ?? _throw(withErrno('ENOENT'));
+		const file = this.files.get(folded) ?? _throw(withErrno('ENOENT'));
 
 		if (!file.contents) await file.loadContents();
 
@@ -229,9 +249,10 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	}
 
 	public readSync(path: string, buffer: Uint8Array, offset: number, end: number): void {
-		if (this.directories.has(path)) throw withErrno('EISDIR');
+		const folded = this._caseFold(path);
+		if (this.directories.has(folded)) throw withErrno('EISDIR');
 
-		const file = this.files.get(path) ?? _throw(withErrno('ENOENT'));
+		const file = this.files.get(folded) ?? _throw(withErrno('ENOENT'));
 
 		if (!file.contents) {
 			void file.loadContents();
@@ -239,6 +260,17 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		}
 
 		buffer.set(file.contents.subarray(offset, end));
+	}
+
+	private _caseFold(original: string, update: boolean = false): string {
+		if (this.caseFold) {
+			const folded = this.caseFold == 'upper' ? original.toUpperCase() : original.toLowerCase();
+			if (update && !this.folded.has(folded) && folded !== original) {
+				this.folded.set(folded, original);
+			}
+			return folded;
+		}
+		return original;
 	}
 }
 
@@ -330,6 +362,7 @@ const _Zip = {
 		},
 		name: { type: 'string', required: false },
 		lazy: { type: 'boolean', required: false },
+		caseFold: { type: 'string', required: false },
 	},
 
 	isAvailable(): boolean {
@@ -337,7 +370,7 @@ const _Zip = {
 	},
 
 	create<TBuffer extends ArrayBufferLike = ArrayBuffer>(opt: ZipOptions<TBuffer>): ZipFS<TBuffer> {
-		return new ZipFS<TBuffer>(opt.name ?? '', getSource(opt.data), opt.lazy);
+		return new ZipFS<TBuffer>(opt.name ?? '', getSource(opt.data), opt.lazy, opt.caseFold);
 	},
 } satisfies Backend<ZipFS, ZipOptions>;
 type _Zip = typeof _Zip;
