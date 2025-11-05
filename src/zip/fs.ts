@@ -110,7 +110,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 				throw withErrno('EPERM', 'Unexpectedly encountered an absolute path in a zip file.');
 			}
 			// Strip the trailing '/' if it exists
-			const name = cd.name.endsWith('/') ? '/' + cd.name.slice(0, -1) : '/' + cd.name;
+			const name =  '/'  + (cd.name.endsWith('/') ? + cd.name.slice(0, -1) : cd.name);
 			this.files.set(this._caseFold(name, true), cd);
 			ptr += cd.size;
 		}
