@@ -237,14 +237,14 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	}
 
 	private _caseFold(original: string, update: boolean = false): string {
-		if (this.caseFold) {
-			const folded = this.caseFold == 'upper' ? original.toUpperCase() : original.toLowerCase();
-			if (update && !this.folded.has(folded) && folded !== original) {
-				this.folded.set(folded, original);
-			}
-			return folded;
+		if (!this.caseFold) {
+			return original;
 		}
-		return original;
+		const folded = this.caseFold == 'upper' ? original.toUpperCase() : original.toLowerCase();
+		if (update && !this.folded.has(folded) && folded !== original) {
+			this.folded.set(folded, original);
+		}
+		return folded;
 	}
 }
 
