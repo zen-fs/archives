@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 import { FileSystem, Inode, type InodeLike, type UsageInfo } from '@zenfs/core';
-import type { Backend } from '@zenfs/core/backends/backend.js';
-import type { CaseFold } from '@zenfs/core/internal/filesystem.js';
+import type { Backend, SharedConfig } from '@zenfs/core/backends/backend.js';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/constants';
 import { Readonly } from '@zenfs/core/mixins/readonly.js';
 import { parse } from '@zenfs/core/path';
@@ -22,7 +21,7 @@ export interface ZipDataSource<TBuffer extends ArrayBufferLike = ArrayBuffer> {
 /**
  * Configuration options for a ZipFS file system.
  */
-export interface ZipOptions<TBuffer extends ArrayBufferLike = ArrayBuffer> {
+export interface ZipOptions<TBuffer extends ArrayBufferLike = ArrayBuffer> extends SharedConfig {
 	/**
 	 * The zip file as a binary buffer.
 	 */
@@ -37,13 +36,6 @@ export interface ZipOptions<TBuffer extends ArrayBufferLike = ArrayBuffer> {
 	 * Whether to wait to initialize entries
 	 */
 	lazy?: boolean;
-
-	/**
-	 * Case folding mode for file names (optional).
-	 * Can be 'lower', or 'upper'.
-	 * Default is undefined.
-	 */
-	caseFold?: CaseFold;
 }
 
 /**
@@ -126,7 +118,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		while (ptr < cdEnd) {
 			const cd = await getDynamic<FileEntry<TBuffer>, TBuffer>(FileEntry, this.data, ptr);
 
-			if (!this.lazy) await cd.loadContents();
+			if (!this.options.lazy) await cd.loadContents();
 			/* 	Paths must be absolute,
 			yet zip file paths are always relative to the zip root.
 			So we prepend '/' and call it a day. */
@@ -171,8 +163,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	public constructor(
 		public label: string,
 		protected data: ZipDataSource<TBuffer>,
-		public readonly lazy: boolean = false,
-		public readonly caseFold?: CaseFold
+		protected readonly options: ZipOptions<TBuffer>
 	) {
 		super(0x207a6970, 'zipfs');
 	}
@@ -261,10 +252,10 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	}
 
 	private _caseFold(original: string, update: boolean = false): string {
-		if (!this.caseFold) {
+		if (!this.options.caseFold) {
 			return original;
 		}
-		const folded = this.caseFold == 'upper' ? original.toUpperCase() : original.toLowerCase();
+		const folded = this.options.caseFold == 'upper' ? original.toUpperCase() : original.toLowerCase();
 		if (update && !this.folded.has(folded) && folded !== original) {
 			this.folded.set(folded, original);
 		}
@@ -348,19 +339,9 @@ const _Zip = {
 	name: 'Zip',
 
 	options: {
-		data: {
-			type: [
-				ArrayBuffer,
-				Object.getPrototypeOf(Uint8Array) /* %TypedArray% */,
-				function ZipDataSource(v: unknown): v is ZipDataSource {
-					return typeof v == 'object' && v !== null && 'size' in v && typeof v.size == 'number' && 'get' in v && typeof v.get == 'function';
-				},
-			],
-			required: true,
-		},
+		data: { type: 'object', required: true },
 		name: { type: 'string', required: false },
 		lazy: { type: 'boolean', required: false },
-		caseFold: { type: 'string', required: false },
 	},
 
 	isAvailable(): boolean {
@@ -368,7 +349,7 @@ const _Zip = {
 	},
 
 	create<TBuffer extends ArrayBufferLike = ArrayBuffer>(opt: ZipOptions<TBuffer>): ZipFS<TBuffer> {
-		return new ZipFS<TBuffer>(opt.name ?? '', getSource(opt.data), opt.lazy, opt.caseFold);
+		return new ZipFS<TBuffer>(opt.name ?? '', getSource(opt.data), opt);
 	},
 } satisfies Backend<ZipFS, ZipOptions>;
 type _Zip = typeof _Zip;
