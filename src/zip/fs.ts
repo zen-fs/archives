@@ -208,9 +208,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		const entries = this.directories.get(this._caseFold(path));
 		if (!entries) throw withErrno('ENODATA');
 
-		return Array.from(entries).map(entry => {
-			return this.folded.get(entry) ?? entry;
-		});
+		return Array.from(entries).map(entry => this.folded.get(entry) ?? entry);
 	}
 
 	public async read(path: string, buffer: Uint8Array, offset: number, end: number): Promise<void> {
