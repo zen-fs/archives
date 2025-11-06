@@ -68,7 +68,6 @@ export interface ZipOptions<TBuffer extends ArrayBufferLike = ArrayBuffer> exten
 export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readonly(FileSystem) {
 	protected files: Map<string, FileEntry<TBuffer>> = new Map();
 	protected directories: Map<string, Set<string>> = new Map();
-	protected folded: Map<string, string> = new Map();
 
 	/**
 	 * Inodes for each path.
@@ -127,16 +126,15 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 			}
 			// Strip the trailing '/' if it exists
 			const name = '/' + (cd.name.endsWith('/') ? cd.name.slice(0, -1) : cd.name);
-			this.files.set(this._caseFold(name, true), cd);
+			this.files.set(this._caseFold(name), cd);
 			ptr += cd.$size;
 		}
 
 		// Parse directory entries
 		for (const entry of this.files.keys()) {
-			const name = this.folded.get(entry) ?? entry;
-			let { dir, base } = parse(name);
+			let { dir, base } = parse(entry);
 
-			dir = this._caseFold(dir, true);
+			dir = this._caseFold(dir);
 			if (!this.directories.has(dir)) {
 				this.directories.set(dir, new Set());
 			}
@@ -146,10 +144,9 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 
 		// Add subdirectories to their parent's entries
 		for (const entry of this.directories.keys()) {
-			const name = this.folded.get(entry) ?? entry;
-			let { dir, base } = parse(name);
+			let { dir, base } = parse(entry);
 
-			dir = this._caseFold(dir, true);
+			dir = this._caseFold(dir);
 			if (base == '') continue;
 
 			if (!this.directories.has(dir)) {
@@ -211,9 +208,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		const entries = this.directories.get(this._caseFold(path));
 		if (!entries) throw withErrno('ENODATA');
 
-		return Array.from(entries).map(entry => {
-			return this.folded.get(entry) ?? entry;
-		});
+		return Array.from(entries);
 	}
 
 	public readdirSync(path: string): string[] {
@@ -223,7 +218,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		const entries = this.directories.get(this._caseFold(path));
 		if (!entries) throw withErrno('ENODATA');
 
-		return Array.from(entries).map(entry => this.folded.get(entry) ?? entry);
+		return Array.from(entries);
 	}
 
 	public async read(path: string, buffer: Uint8Array, offset: number, end: number): Promise<void> {
@@ -251,15 +246,11 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		buffer.set(file.contents.subarray(offset, end));
 	}
 
-	private _caseFold(original: string, update: boolean = false): string {
+	private _caseFold(original: string): string {
 		if (!this.options.caseFold) {
 			return original;
 		}
-		const folded = this.options.caseFold == 'upper' ? original.toUpperCase() : original.toLowerCase();
-		if (update && !this.folded.has(folded) && folded !== original) {
-			this.folded.set(folded, original);
-		}
-		return folded;
+		return this.options.caseFold == 'upper' ? original.toUpperCase() : original.toLowerCase();
 	}
 }
 
