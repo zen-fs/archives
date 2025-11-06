@@ -26,7 +26,7 @@ function _runTests() {
 		assert.equal(fs.readdirSync('/nested').length, 1);
 	});
 
-	test('readdir /nested/omg.txt', () => {
+	test('read /nested/omg.txt', () => {
 		assert.equal(fs.readFileSync('/nested/omg.txt', 'utf8'), 'This is a nested file!');
 	});
 }
@@ -39,6 +39,34 @@ suite('Basic ZIP operations', () => {
 	});
 
 	_runTests();
+});
+
+await suite('ZIP case fold', {}, () => {
+	test('Configure', async () => {
+		const buffer = readFileSync(import.meta.dirname + '/files/data.zip');
+		const data = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+		await configureSingle({ backend: Zip, data, caseFold: 'upper' });
+	});
+
+	test('read /ONES.TXT', () => {
+		assert.equal(fs.readFileSync('/ONE.TXT', 'utf8'), '1');
+	});
+
+	test('read /NESTED/OMG.TXT', () => {
+		assert.equal(fs.readFileSync('/NESTED/OMG.TXT', 'utf8'), 'This is a nested file!');
+	});
+
+	test('readdir /NESTED', () => {
+		assert.equal(fs.readdirSync('/NESTED').length, 1);
+	});
+
+	test('read /nested/omg.txt (all lower)', () => {
+		assert.equal(fs.readFileSync('/nested/omg.txt', 'utf8'), 'This is a nested file!');
+	});
+
+	test('readdir /Nested (mixed case)', () => {
+		assert.equal(fs.readdirSync('/Nested').length, 1);
+	});
 });
 
 await using handle = await open(import.meta.dirname + '/files/data.zip');
