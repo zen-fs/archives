@@ -19,7 +19,7 @@ await suite('Basic ISO9660 operations', () => {
 	});
 
 	test('readdir /', () => {
-		assert.equal(fs.readdirSync('/').length, 3);
+		assert.deepEqual(fs.readdirSync('/').sort(), ['nested', 'one.txt', 'two.txt']);
 	});
 
 	test('read /one.txt', () => {
@@ -31,7 +31,7 @@ await suite('Basic ISO9660 operations', () => {
 	});
 
 	test('readdir /nested', () => {
-		assert.equal(fs.readdirSync('/nested').length, 1);
+		assert.deepEqual(fs.readdirSync('/nested'), ['omg.txt']);
 	});
 
 	test('readdir /nested/omg.txt', () => {
