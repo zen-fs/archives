@@ -10,8 +10,10 @@ import type { SystemUseEntry } from './entries.js';
 import { CLEntry, NMEntry, NMFlags, SLEntry, constructSystemUseEntries } from './entries.js';
 import { FileFlags, ShortFormDate } from './misc.js';
 
-@struct.packed('DirectoryRecord')
+@struct.packed()
 export class DirectoryRecord<T extends ArrayBufferLike = ArrayBufferLike> extends $from(BufferView)<T> {
+	static name = 'DirectoryRecord';
+
 	/**
 	 * @internal
 	 */
@@ -166,6 +168,7 @@ export class DirectoryRecord<T extends ArrayBufferLike = ArrayBufferLike> extend
 
 	private _decoder?: TextDecoder;
 
+	@memoize
 	protected get _decode() {
 		this._decoder ||= new TextDecoder(this._kind == 'Joliet' ? 'utf-16be' : 'utf-8');
 		return (data: Uint8Array) => this._decoder!.decode(data).toLowerCase();

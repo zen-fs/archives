@@ -35,8 +35,10 @@ export enum AttributeCompat {
 /**
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.7
  */
-@struct.packed('LocalFileHeader')
+@struct.packed()
 export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	static name = 'LocalFileHeader';
+
 	_source!: ZipDataSource<TBuffer>;
 
 	@t.uint32 public accessor signature!: number;
@@ -149,8 +151,10 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
  * Archive extra data record
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.11
  */
-@struct.packed('ExtraDataRecord')
+@struct.packed()
 export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	static name = 'ExtraDataRecord';
+
 	/** @internal @hidden */
 	_source!: ZipDataSource<TBuffer>;
 
@@ -185,8 +189,10 @@ export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
  * This is a file metadata entry inside the "central directory".
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.12
  */
-@struct.packed('FileEntry')
+@struct.packed()
 export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	static name = 'FileEntry';
+
 	/** @internal @hidden */
 	_source!: ZipDataSource<TBuffer>;
 
@@ -416,8 +422,10 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
  * Digital signature
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.13
  */
-@struct.packed('DigitalSignature')
+@struct.packed()
 export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	static name = 'DigitalSignature';
+
 	/** @internal @hidden */
 	_source!: ZipDataSource<TBuffer>;
 
@@ -449,8 +457,10 @@ export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> ext
  * Internally, ZIP files have only a single directory: the "central directory".
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.16
  */
-@struct.packed('Header')
+@struct.packed()
 export class Header<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	static name = 'Header';
+
 	/** @internal @hidden */
 	_source!: ZipDataSource<TBuffer>;
 

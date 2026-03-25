@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 import { withErrno } from 'kerium';
 import { $from, field, struct, types as t } from 'memium/decorators';
-import { _throw } from 'utilium';
+import { _throw, memoize } from 'utilium';
 import { BufferView } from 'utilium/buffer.js';
 import { DirectoryRecord } from './DirectoryRecord.js';
 import { EREntry, RREntry, SPEntry } from './entries.js';
@@ -17,8 +17,10 @@ export const enum VolumeDescriptorType {
 	SetTerminator = 255,
 }
 
-@struct.packed('VolumeDescriptor')
+@struct.packed()
 export class VolumeDescriptor<T extends ArrayBufferLike = ArrayBufferLike> extends $from(BufferView)<T> {
+	static name = 'VolumeDescriptor';
+
 	@t.uint8 public accessor type!: VolumeDescriptorType;
 
 	@t.char(5) public accessor standardIdentifier: string = '';
@@ -32,8 +34,10 @@ export class VolumeDescriptor<T extends ArrayBufferLike = ArrayBufferLike> exten
  * Primary or supplementary volume descriptor.
  * Supplementary VDs are basically PVDs with some extra sauce, so we use the same struct for both.
  */
-@struct.packed('PrimaryVolumeDescriptor')
+@struct.packed()
 export class PrimaryVolumeDescriptor extends VolumeDescriptor {
+	static name = 'PrimaryVolumeDescriptor';
+
 	public constructor(
 		/**
 		 * The name of the volume descriptor type, either 'ISO9660' or 'Joliet'.
@@ -43,24 +47,23 @@ export class PrimaryVolumeDescriptor extends VolumeDescriptor {
 	) {
 		super(...args);
 
-		this._root = new DirectoryRecord(this.buffer, this.byteOffset + 156);
-		this._root._kind = this.name;
+		this.root._kind = this.name;
 
-		const dir = this._root.directory.dotEntry;
+		const dir = this.root.directory.dotEntry;
 
 		if (dir.suEntries.length && dir.suEntries[0] instanceof SPEntry && dir.suEntries[0].checkMagic()) {
 			// SUSP is in use.
 			for (const entry of dir.suEntries.slice(1)) {
 				if (entry instanceof RREntry || (entry instanceof EREntry && entry.extensionIdentifier === rockRidgeIdentifier)) {
 					// Rock Ridge is in use!
-					this._root.rockRidgeOffset = dir.suEntries[0].skip;
+					this.root.rockRidgeOffset = dir.suEntries[0].skip;
 					break;
 				}
 			}
 		}
 
 		// Wipe out directory. Start over with RR knowledge.
-		if (this._root.rockRidgeOffset > -1) (dir as any)._dir = undefined;
+		if (this.root.rockRidgeOffset > -1) (dir as any)._dir = undefined;
 	}
 
 	protected _decoder?: TextDecoder;
@@ -165,11 +168,10 @@ export class PrimaryVolumeDescriptor extends VolumeDescriptor {
 	 * which contains a single byte Directory Identifier (0x00),
 	 * hence the fixed 34 byte size.
 	 */
-	@field(DirectoryRecord) protected accessor _root: DirectoryRecord;
+	@field(DirectoryRecord) protected accessor _root!: DirectoryRecord;
 
+	@memoize
 	public get root(): DirectoryRecord {
-		if (this._root && this._root.buffer) return this._root;
-
 		return this._root;
 	}
 

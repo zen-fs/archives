@@ -3,8 +3,10 @@ import { $from, struct, types as t } from 'memium/decorators';
 import { memoize } from 'utilium';
 import { BufferView } from 'utilium/buffer.js';
 
-@struct.packed('LongFormDate')
+@struct.packed()
 export class LongFormDate<T extends ArrayBufferLike = ArrayBuffer> extends $from(BufferView)<T> {
+	static name = 'LongFormDate';
+
 	@t.char(4) protected accessor _year: string = '';
 	public get year(): number {
 		return parseInt(this._year);
@@ -68,8 +70,10 @@ export class LongFormDate<T extends ArrayBufferLike = ArrayBuffer> extends $from
 	}
 }
 
-@struct.packed('ShortFormDate')
+@struct.packed()
 export class ShortFormDate<T extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<T> {
+	static name = 'ShortFormDate';
+
 	/**
 	 * Years since 1990
 	 * @todo This may not be the correct size

@@ -33,8 +33,10 @@ export const enum EntrySignature {
 /**
  * Base system use entry
  */
-@struct.packed('SystemUseEntry')
+@struct.packed()
 export class SystemUseEntry extends BufferView {
+	static name = 'SystemUseEntry';
+
 	@t.uint16 public accessor signature!: EntrySignature;
 
 	public get signatureString(): string {
@@ -49,8 +51,10 @@ export class SystemUseEntry extends BufferView {
 /**
  * Continuation entry.
  */
-@struct.packed('CEEntry')
+@struct.packed()
 export class CEEntry extends SystemUseEntry {
+	static name = 'CEEntry';
+
 	protected _entries: SystemUseEntry[] = [];
 
 	/**
@@ -77,14 +81,18 @@ export class CEEntry extends SystemUseEntry {
 /**
  * Padding entry.
  */
-@struct.packed('PDEntry')
-export class PDEntry extends SystemUseEntry {}
+@struct.packed()
+export class PDEntry extends SystemUseEntry {
+	static name = 'PDEntry';
+}
 
 /**
  * Identifies that SUSP is in-use.
  */
-@struct.packed('SPEntry')
+@struct.packed()
 export class SPEntry extends SystemUseEntry {
+	static name = 'SPEntry';
+
 	@t.uint8(2) public accessor magic!: Tuple<number, 2>;
 
 	public checkMagic(): boolean {
@@ -97,14 +105,18 @@ export class SPEntry extends SystemUseEntry {
 /**
  * Identifies the end of the SUSP entries.
  */
-@struct.packed('STEntry')
-export class STEntry extends SystemUseEntry {}
+@struct.packed()
+export class STEntry extends SystemUseEntry {
+	static name = 'STEntry';
+}
 
 /**
  * Specifies system-specific extensions to SUSP.
  */
-@struct.packed('EREntry')
+@struct.packed()
 export class EREntry extends SystemUseEntry {
+	static name = 'EREntry';
+
 	@t.uint8 public accessor idLength!: number;
 
 	@t.uint8 public accessor descriptorLength!: number;
@@ -126,8 +138,10 @@ export class EREntry extends SystemUseEntry {
 	}
 }
 
-@struct.packed('ESEntry')
+@struct.packed()
 export class ESEntry extends SystemUseEntry {
+	static name = 'ESEntry';
+
 	@t.uint8 public accessor extensionSequence!: number;
 }
 
@@ -135,14 +149,18 @@ export class ESEntry extends SystemUseEntry {
  * RockRidge: Marks that RockRidge is in use
  * Note: Deprecated in the spec
  */
-@struct.packed('RREntry')
-export class RREntry extends SystemUseEntry {}
+@struct.packed()
+export class RREntry extends SystemUseEntry {
+	static name = 'RREntry';
+}
 
 /**
  * RockRidge: Records POSIX file attributes.
  */
-@struct.packed('PXEntry')
+@struct.packed()
 export class PXEntry extends SystemUseEntry {
+	static name = 'PXEntry';
+
 	@t.uint64 public accessor mode!: bigint;
 
 	@t.uint64 public accessor nlinks!: bigint;
@@ -157,8 +175,10 @@ export class PXEntry extends SystemUseEntry {
 /**
  * RockRidge: Records POSIX device number.
  */
-@struct.packed('PNEntry')
+@struct.packed()
 export class PNEntry extends SystemUseEntry {
+	static name = 'PNEntry';
+
 	@t.uint64 public accessor dev_high!: bigint;
 
 	@t.uint64 public accessor dev_low!: bigint;
@@ -167,8 +187,10 @@ export class PNEntry extends SystemUseEntry {
 /**
  * RockRidge: Records symbolic link
  */
-@struct.packed('SLEntry')
+@struct.packed()
 export class SLEntry extends SystemUseEntry {
+	static name = 'SLEntry';
+
 	@t.uint8 public accessor flags!: number;
 
 	public get continueFlag(): number {
@@ -196,8 +218,10 @@ export const enum NMFlags {
 /**
  * RockRidge: Records alternate file name
  */
-@struct.packed('NMEntry')
+@struct.packed()
 export class NMEntry extends SystemUseEntry {
+	static name = 'NMEntry';
+
 	@t.uint8 public accessor flags!: NMFlags;
 
 	public name(getString: (data: Uint8Array) => string): string {
@@ -208,24 +232,30 @@ export class NMEntry extends SystemUseEntry {
 /**
  * RockRidge: Records child link
  */
-@struct.packed('CLEntry')
+@struct.packed()
 export class CLEntry extends SystemUseEntry {
+	static name = 'CLEntry';
+
 	@t.uint32 public accessor childDirectoryLba!: number;
 }
 
 /**
  * RockRidge: Records parent link.
  */
-@struct.packed('PLEntry')
+@struct.packed()
 export class PLEntry extends SystemUseEntry {
+	static name = 'PLEntry';
+
 	@t.uint32 public accessor parentDirectoryLba!: number;
 }
 
 /**
  * RockRidge: Records relocated directory.
  */
-@struct.packed('REEntry')
-export class REEntry extends SystemUseEntry {}
+@struct.packed()
+export class REEntry extends SystemUseEntry {
+	static name = 'REEntry';
+}
 
 export const enum TFFlag {
 	CREATION = 1,
@@ -241,8 +271,10 @@ export const enum TFFlag {
 /**
  * RockRidge: Records file timestamps
  */
-@struct.packed('TFEntry')
+@struct.packed()
 export class TFEntry extends SystemUseEntry {
+	static name = 'TFEntry';
+
 	@t.uint8 public accessor flags!: number;
 
 	private _getDate(kind: TFFlag): Date | undefined {
@@ -291,6 +323,8 @@ export class TFEntry extends SystemUseEntry {
  * RockRidge: File data in sparse format.
  */
 export class SFEntry extends SystemUseEntry {
+	static name = 'SFEntry';
+
 	@t.uint64 public accessor virtualSizeHigh!: bigint;
 
 	@t.uint64 public accessor virtualSizeLow!: bigint;

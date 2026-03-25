@@ -9,8 +9,10 @@ export const enum SLComponentFlags {
 	ROOT = 1 << 3,
 }
 
-@struct.packed('SLComponentRecord')
+@struct.packed()
 export class SLComponentRecord extends BufferView {
+	static name = 'SLComponentRecord';
+
 	@t.uint8 public accessor flags!: SLComponentFlags;
 
 	@t.uint8 public accessor componentLength!: number;

@@ -8,8 +8,8 @@ export class Directory extends Map<string, DirectoryRecord> {
 
 	public constructor(protected record: DirectoryRecord) {
 		super();
-		let i = record.lba;
-		let limit = i + record.dataLength;
+		let i = record.lba,
+			limit = i + record.dataLength;
 		if (!(record.fileFlags & FileFlags.Directory)) {
 			// Must have a CL entry.
 			const cl = record.suEntries.find(e => e instanceof CLEntry);
@@ -18,7 +18,7 @@ export class Directory extends Map<string, DirectoryRecord> {
 			limit = Infinity;
 		}
 
-		const data = new Uint8Array(record.buffer!);
+		const data = new Uint8Array(record.buffer);
 
 		while (i < limit) {
 			const length = data[i];
@@ -30,7 +30,7 @@ export class Directory extends Map<string, DirectoryRecord> {
 			}
 			const _record = new DirectoryRecord(record.buffer, i);
 			_record.rockRidgeOffset = record.rockRidgeOffset;
-			const fileName = _record.fileName;
+			const { fileName } = _record;
 			// Skip '.' and '..' entries.
 			if (fileName !== '\u0000' && fileName !== '\u0001' && (!_record.hasRockRidge || !_record.suEntries.filter(e => e instanceof REEntry).length)) {
 				this.set(fileName, _record);
