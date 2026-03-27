@@ -4,7 +4,8 @@ import { sizeof } from 'memium';
 import { $from, struct, types as t } from 'memium/decorators';
 import { CompressionMethod, decompressionMethods } from './compression.js';
 import type { ZipDataSource } from './fs.js';
-import { msdosDate, safeDecode } from './utils.js';
+import { decodeString, msdosDate, safeDecode } from './utils.js';
+import { memoize } from 'utilium';
 
 /**
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.2.2
@@ -35,11 +36,9 @@ export enum AttributeCompat {
 /**
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.7
  */
-@struct.packed()
+@struct.packed({ isDynamic: true })
 export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	static name = 'LocalFileHeader';
-
-	_source!: ZipDataSource<TBuffer>;
 
 	@t.uint32 public accessor signature!: number;
 
@@ -113,18 +112,23 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 	 */
 	@t.uint16 public accessor extraLength!: number;
 
+	@t.uint8(0, { countedBy: 'nameLength' }) protected accessor _name!: Uint8Array;
+
 	/**
 	 * The name of the file, with optional relative path.
 	 * @see CentralDirectory.fileName
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.17
 	 */
-	name!: string;
+	@memoize
+	get name(): string {
+		return decodeString(this._name, this.useUTF8);
+	}
 
 	/**
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	extra!: Uint8Array;
+	@t.uint8(0, { countedBy: 'extraLength' }) public accessor extra!: Uint8Array;
 
 	public get size(): number {
 		return LocalFileHeader.size + this.nameLength + this.extraLength;
@@ -137,9 +141,8 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<LocalFileHeader<TBuffer>> {
 		const entryData = await source.get(offset, LocalFileHeader.size);
 		const cd = new LocalFileHeader<TBuffer>(entryData.buffer, entryData.byteOffset);
-		cd._source = source;
 		offset += LocalFileHeader.size;
-		cd.name = await safeDecode(source, cd.useUTF8, offset, cd.nameLength);
+		cd._name = await source.get(offset, cd.nameLength);
 		offset += cd.nameLength;
 		cd.extra = await source.get(offset, cd.extraLength);
 		offset += cd.extraLength;
@@ -189,7 +192,7 @@ export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
  * This is a file metadata entry inside the "central directory".
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.12
  */
-@struct.packed()
+@struct.packed({ isDynamic: true })
 export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	static name = 'FileEntry';
 
@@ -319,6 +322,8 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	 */
 	@t.uint32 public accessor headerRelativeOffset!: number;
 
+	@t.uint8(0, { countedBy: 'nameLength' }) protected accessor _name!: Uint8Array;
+
 	/**
 	 * The name of the file, with optional relative path.
 	 * The filename is preloaded here, since looking it up is expensive.
@@ -334,19 +339,27 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	 * To avoid seeking all over the file to recover the known-good filenames from file headers, we simply convert '\' to '/' here.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.17
 	 */
-	name!: string;
+	@memoize
+	get name(): string {
+		return decodeString(this._name, this.useUTF8);
+	}
 
 	/**
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	extra!: Uint8Array;
+	@t.uint8(0, { countedBy: 'extraLength' }) public accessor extra!: Uint8Array;
+
+	@t.uint8(0, { countedBy: 'commentLength' }) protected accessor _comment!: Uint8Array;
 
 	/**
 	 * The comment for this file
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.18
 	 */
-	comment!: string;
+	@memoize
+	get comment(): string {
+		return decodeString(this._comment, this.useUTF8);
+	}
 
 	/**
 	 * The total size of the this entry
@@ -409,11 +422,11 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 		const cd = new FileEntry<TBuffer>(entryData.buffer, entryData.byteOffset);
 		cd._source = source;
 		offset += FileEntry.size;
-		cd.name = await safeDecode(source, cd.useUTF8, offset, cd.nameLength);
+		cd._name = await source.get(offset, cd.nameLength);
 		offset += cd.nameLength;
 		cd.extra = await source.get(offset, cd.extraLength);
 		offset += cd.extraLength;
-		cd.comment = await safeDecode(source, cd.useUTF8, offset, cd.commentLength);
+		cd._comment = await source.get(offset, cd.commentLength);
 		return cd;
 	}
 }

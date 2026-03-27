@@ -160,6 +160,14 @@ export const extendedASCIIChars = [
 	' ',
 ];
 
+export function decodeString(value: Uint8Array, utf8: boolean) {
+	if (utf8) {
+		return decodeUTF8(value);
+	} else {
+		return [...value].map(char => (char > 127 ? extendedASCIIChars[char - 128] : String.fromCharCode(char))).join('');
+	}
+}
+
 /**
  * Safely decodes the string from a buffer.
  * @hidden
@@ -170,9 +178,5 @@ export async function safeDecode(source: ZipDataSource<any>, utf8: boolean, star
 	}
 
 	const uintArray = await source.get(start, length);
-	if (utf8) {
-		return decodeUTF8(uintArray);
-	} else {
-		return [...uintArray].map(char => (char > 127 ? extendedASCIIChars[char - 128] : String.fromCharCode(char))).join('');
-	}
+	return decodeString(uintArray, utf8);
 }
