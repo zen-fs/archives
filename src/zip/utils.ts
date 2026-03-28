@@ -8,7 +8,7 @@ export function isShared(b: unknown): b is SharedArrayBuffer {
 }
 
 /**
- * Converts the input `time` and `date` in MS-DOS format into a `Date`.
+ * Converts the input `datetime` in MS-DOS format into a `Date`.
  *
  * MS-DOS format:
  * second			5 bits (2 second-precision)
@@ -19,7 +19,7 @@ export function isShared(b: unknown): b is SharedArrayBuffer {
  * year (from 1980)	7 bits
  * @hidden
  */
-export function msdosDate(datetime: number): Date {
+export function fromMsdosDate(datetime: number): Date {
 	return new Date(
 		((datetime >> 25) & 127) + 1980, // year
 		((datetime >> 21) & 15) - 1, // month
@@ -27,6 +27,29 @@ export function msdosDate(datetime: number): Date {
 		(datetime >> 11) & 31, // hour
 		(datetime >> 5) & 63, // minute
 		(datetime & 31) * 2 // second
+	);
+}
+
+/**
+ * Converts the input `Date` to a MS-DOS `datetime`.
+ *
+ * MS-DOS format:
+ * second			5 bits (2 second-precision)
+ * minute			6 bits
+ * hour				5 bits
+ * day (1-31)		5 bits
+ * month (1-23)		4 bits (MSDOS indexes with 1)
+ * year (from 1980)	7 bits
+ * @hidden
+ */
+export function toMsdosDate(date: Date): number {
+	return (
+		(Math.max(0, date.getFullYear() - 1980) << 25) |
+		((date.getMonth() + 1) << 21) |
+		(date.getDate() << 16) |
+		(date.getHours() << 11) |
+		(date.getMinutes() << 5) |
+		(date.getSeconds() >> 1)
 	);
 }
 

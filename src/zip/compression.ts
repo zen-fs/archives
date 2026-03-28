@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-import { inflateSync } from 'fflate';
+import { deflateSync, inflateSync } from 'fflate';
 
 /**
  * 4.4.5
@@ -35,5 +35,20 @@ export const decompressionMethods: { [method in CompressionMethod]?: decompress 
 
 	[CompressionMethod.STORED](data, compressedSize, uncompressedSize): Uint8Array {
 		return data.subarray(0, compressedSize);
+	},
+};
+
+export type compress = (data: Uint8Array) => Uint8Array;
+
+/**
+ * Maps CompressionMethod to function that compresses.
+ */
+export const compressionMethods: { [method in CompressionMethod]?: compress } = {
+	[CompressionMethod.DEFLATE](data): Uint8Array {
+		return deflateSync(data);
+	},
+
+	[CompressionMethod.STORED](data): Uint8Array {
+		return data;
 	},
 };

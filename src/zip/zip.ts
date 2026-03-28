@@ -5,7 +5,7 @@ import { $from, struct, types as t } from 'memium/decorators';
 import { memoize } from 'utilium';
 import { CompressionMethod, decompressionMethods } from './compression.js';
 import type { ZipDataSource } from './fs.js';
-import { decodeString, getDynamic, msdosDate } from './utils.js';
+import { decodeString, getDynamic, fromMsdosDate } from './utils.js';
 
 /**
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.2.2
@@ -76,7 +76,7 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.6
 	 */
 	public get lastModified(): Date {
-		return msdosDate(this.datetime);
+		return fromMsdosDate(this.datetime);
 	}
 
 	/**
@@ -239,7 +239,7 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.6
 	 */
 	public get lastModified(): Date {
-		return msdosDate(this.datetime);
+		return fromMsdosDate(this.datetime);
 	}
 
 	/**
