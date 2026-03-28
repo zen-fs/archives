@@ -1,6 +1,6 @@
 {
 	"name": "@zenfs/archives",
-	"version": "1.3.2",
+	"version": "1.3.3",
 	"description": "ZenFS archive backends",
 	"funding": {
 		"type": "individual",
