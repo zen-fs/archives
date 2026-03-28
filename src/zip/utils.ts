@@ -191,7 +191,7 @@ export async function safeDecode(source: ZipDataSource<any>, utf8: boolean, star
  *
  * @internal
  */
-export async function getDynamic<T extends { readonly size: number }, TBuffer extends ArrayBufferLike = ArrayBuffer>(
+export async function getDynamic<T extends { readonly $size: number }, TBuffer extends ArrayBufferLike = ArrayBuffer>(
 	type: Omit<Type<T>, 'array' | 'get'> & { new (buffer: TBuffer, byteOffset?: number): T },
 	source: ZipDataSource<TBuffer>,
 	offset: number,
@@ -203,16 +203,16 @@ export async function getDynamic<T extends { readonly size: number }, TBuffer ex
 	data.set(await source.get(offset, type.size));
 	const value = new type(buffer, 0) as T & { constructor: Type<T> };
 
-	if (value.size > buffer.maxByteLength) {
-		const bigger = new Buf(value.size),
+	if (value.$size > buffer.maxByteLength) {
+		const bigger = new Buf(value.$size),
 			biggerData = new Uint8Array(bigger);
 		biggerData.set(data);
 		buffer = bigger;
 		data = biggerData;
-	} else if (source.isShared) (buffer as SharedArrayBuffer).grow(value.size);
-	else (buffer as ArrayBuffer).resize(value.size);
+	} else if (source.isShared) (buffer as SharedArrayBuffer).grow(value.$size);
+	else (buffer as ArrayBuffer).resize(value.$size);
 
-	data.set(await source.get(offset + type.size, value.size - type.size), type.size);
+	data.set(await source.get(offset + type.size, value.$size - type.size), type.size);
 	Object.assign(value, { _source: source });
 	return value;
 }

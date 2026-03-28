@@ -130,7 +130,7 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 	 */
 	@t.uint8(0, { countedBy: 'extraLength' }) public accessor extra!: Uint8Array;
 
-	public get size(): number {
+	public get $size(): number {
 		return LocalFileHeader.size + this.nameLength + this.extraLength;
 	}
 
@@ -346,7 +346,7 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	/**
 	 * The total size of the this entry
 	 */
-	public get size(): number {
+	public get $size(): number {
 		return sizeof(FileEntry) + this.nameLength + this.extraLength + this.commentLength;
 	}
 
@@ -374,9 +374,9 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	async loadContents(): Promise<void> {
 		// Get the local header before we can figure out where the actual compressed data starts.
 
-		const { compressionMethod, size, name } = await getDynamic<LocalFileHeader, TBuffer>(LocalFileHeader, this._source, this.headerRelativeOffset);
+		const { compressionMethod, $size, name } = await getDynamic<LocalFileHeader, TBuffer>(LocalFileHeader, this._source, this.headerRelativeOffset);
 
-		const data = await this._source.get(this.headerRelativeOffset + size, this.compressedSize);
+		const data = await this._source.get(this.headerRelativeOffset + $size, this.compressedSize);
 		// Check the compression
 		const decompress = decompressionMethods[compressionMethod];
 		if (typeof decompress != 'function') {
@@ -430,12 +430,9 @@ export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> ext
  * Internally, ZIP files have only a single directory: the "central directory".
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.16
  */
-@struct.packed()
+@struct.packed({ isDynamic: true })
 export class Header<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	static name = 'Header';
-
-	/** @internal @hidden */
-	_source!: ZipDataSource<TBuffer>;
 
 	@t.uint32 public accessor signature!: number;
 
@@ -491,7 +488,16 @@ export class Header<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from
 	 * Assuming the content is UTF-8 encoded. The specification doesn't specify.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.26
 	 */
-	comment!: string;
+	@t.uint8(0, { countedBy: 'commentLength' }) public accessor _comment!: Uint8Array;
+
+	@memoize
+	public get comment(): string {
+		return decodeString(this._comment, true);
+	}
+
+	public get $size(): number {
+		return Header.size + this.commentLength;
+	}
 }
 
 /**
@@ -516,10 +522,7 @@ export async function computeEOCD<T extends ArrayBufferLike = ArrayBuffer>(sourc
 		// The magic number is the EOCD Signature
 		if (sig === 0x6054b50) {
 			log.debug('zipfs: found End of Central Directory signature at 0x' + offset.toString(16));
-			const header = new Header<T>(data.buffer, data.byteOffset);
-			header._source = source;
-			header.comment = await safeDecode(source, true, offset + Header.size, header.commentLength);
-			return header;
+			return await getDynamic<Header, T>(Header, source, offset);
 		}
 	}
 	throw log.err(withErrno('EINVAL', 'zipfs: could not locate End of Central Directory signature'));

@@ -105,7 +105,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 			// Strip the trailing '/' if it exists
 			const name = cd.name.endsWith('/') ? cd.name.slice(0, -1) : cd.name;
 			this.files.set('/' + name, cd);
-			ptr += cd.size;
+			ptr += cd.$size;
 		}
 
 		// Parse directory entries
