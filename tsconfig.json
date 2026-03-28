@@ -5,6 +5,7 @@
 		"outDir": "dist",
 		"lib": ["ESNext", "DOM", "DOM.AsyncIterable"],
 		"moduleResolution": "NodeNext",
+		"types": ["node"],
 		"declaration": true,
 		"sourceMap": true,
 		"strict": true,

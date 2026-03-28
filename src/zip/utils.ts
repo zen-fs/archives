@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
+import type { Type } from 'memium';
 import { decodeUTF8 } from 'utilium';
 import type { ZipDataSource } from './fs.js';
+
+export function isShared(b: unknown): b is SharedArrayBuffer {
+	return typeof b == 'object' && b !== null && b.constructor.name === 'SharedArrayBuffer';
+}
 
 /**
  * Converts the input `time` and `date` in MS-DOS format into a `Date`.
@@ -179,4 +184,35 @@ export async function safeDecode(source: ZipDataSource<any>, utf8: boolean, star
 
 	const uintArray = await source.get(start, length);
 	return decodeString(uintArray, utf8);
+}
+
+/**
+ * Gets a dynamically sized struct from a zip data source
+ *
+ * @internal
+ */
+export async function getDynamic<T extends { readonly size: number }, TBuffer extends ArrayBufferLike = ArrayBuffer>(
+	type: Omit<Type<T>, 'array' | 'get'> & { new (buffer: TBuffer, byteOffset?: number): T },
+	source: ZipDataSource<TBuffer>,
+	offset: number,
+	extra: number = 1024
+): Promise<T> {
+	const Buf = (source.isShared ? SharedArrayBuffer : ArrayBuffer) as any as new (size: number, options?: { maxByteLength?: number }) => TBuffer;
+	let buffer = new Buf(type.size, { maxByteLength: type.size + extra }),
+		data = new Uint8Array(buffer);
+	data.set(await source.get(offset, type.size));
+	const value = new type(buffer, 0) as T & { constructor: Type<T> };
+
+	if (value.size > buffer.maxByteLength) {
+		const bigger = new Buf(value.size),
+			biggerData = new Uint8Array(bigger);
+		biggerData.set(data);
+		buffer = bigger;
+		data = biggerData;
+	} else if (source.isShared) (buffer as SharedArrayBuffer).grow(value.size);
+	else (buffer as ArrayBuffer).resize(value.size);
+
+	data.set(await source.get(offset + type.size, value.size - type.size), type.size);
+	Object.assign(value, { _source: source });
+	return value;
 }

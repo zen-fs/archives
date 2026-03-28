@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 import { log, withErrno } from 'kerium';
-import { sizeof } from 'memium';
+import { sizeof, type Type } from 'memium';
 import { $from, struct, types as t } from 'memium/decorators';
+import { memoize } from 'utilium';
 import { CompressionMethod, decompressionMethods } from './compression.js';
 import type { ZipDataSource } from './fs.js';
-import { decodeString, msdosDate, safeDecode } from './utils.js';
-import { memoize } from 'utilium';
+import { decodeString, getDynamic, msdosDate, safeDecode } from './utils.js';
 
 /**
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.2.2
@@ -137,24 +137,13 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 	public get useUTF8(): boolean {
 		return !!(this.flags & (1 << 11));
 	}
-
-	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<LocalFileHeader<TBuffer>> {
-		const entryData = await source.get(offset, LocalFileHeader.size);
-		const cd = new LocalFileHeader<TBuffer>(entryData.buffer, entryData.byteOffset);
-		offset += LocalFileHeader.size;
-		cd._name = await source.get(offset, cd.nameLength);
-		offset += cd.nameLength;
-		cd.extra = await source.get(offset, cd.extraLength);
-		offset += cd.extraLength;
-		return cd;
-	}
 }
 
 /**
  * Archive extra data record
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.11
  */
-@struct.packed()
+@struct.packed({ isDynamic: true })
 export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	static name = 'ExtraDataRecord';
 
@@ -175,16 +164,7 @@ export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public extraField!: Uint8Array;
-
-	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<ExtraDataRecord<TBuffer>> {
-		const entryData = await source.get(offset, ExtraDataRecord.size);
-		const record = new ExtraDataRecord<TBuffer>(entryData.buffer, entryData.byteOffset);
-		record._source = source;
-		offset += ExtraDataRecord.size;
-		record.extraField = await source.get(offset, record.length);
-		return record;
-	}
+	@t.uint8(0, { countedBy: 'length' }) public accessor extraField!: Uint8Array;
 }
 
 /**
@@ -195,6 +175,8 @@ export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 @struct.packed({ isDynamic: true })
 export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	static name = 'FileEntry';
+
+	declare readonly ['constructor']: typeof FileEntry & Type<FileEntry>;
 
 	/** @internal @hidden */
 	_source!: ZipDataSource<TBuffer>;
@@ -391,8 +373,8 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 
 	async loadContents(): Promise<void> {
 		// Get the local header before we can figure out where the actual compressed data starts.
-		const rawLocalHeader = await this._source.get(this.headerRelativeOffset, sizeof(LocalFileHeader));
-		const { compressionMethod, size, name } = new LocalFileHeader(rawLocalHeader.buffer, rawLocalHeader.byteOffset);
+
+		const { compressionMethod, size, name } = await getDynamic<LocalFileHeader, TBuffer>(LocalFileHeader, this._source, this.headerRelativeOffset);
 
 		const data = await this._source.get(this.headerRelativeOffset + size, this.compressedSize);
 		// Check the compression
@@ -416,26 +398,13 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	public get data(): Uint8Array {
 		return this.contents;
 	}
-
-	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<FileEntry<TBuffer>> {
-		const entryData = await source.get(offset, FileEntry.size);
-		const cd = new FileEntry<TBuffer>(entryData.buffer, entryData.byteOffset);
-		cd._source = source;
-		offset += FileEntry.size;
-		cd._name = await source.get(offset, cd.nameLength);
-		offset += cd.nameLength;
-		cd.extra = await source.get(offset, cd.extraLength);
-		offset += cd.extraLength;
-		cd._comment = await source.get(offset, cd.commentLength);
-		return cd;
-	}
 }
 
 /**
  * Digital signature
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.13
  */
-@struct.packed()
+@struct.packed({ isDynamic: true })
 export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	static name = 'DigitalSignature';
 
@@ -452,16 +421,7 @@ export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> ext
 
 	@t.uint16 public accessor size!: number;
 
-	public signatureData!: Uint8Array;
-
-	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<DigitalSignature<TBuffer>> {
-		const data = await source.get(offset, DigitalSignature.size);
-		const ds = new DigitalSignature<TBuffer>(data.buffer, data.byteOffset);
-		ds._source = source;
-		offset += DigitalSignature.size;
-		ds.signatureData = await source.get(offset, ds.size);
-		return ds;
-	}
+	@t.uint8(0, { countedBy: 'size' }) public accessor signatureData!: Uint8Array;
 }
 
 /**

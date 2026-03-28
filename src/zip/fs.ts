@@ -9,9 +9,11 @@ import { err } from 'kerium/log';
 import { _throw } from 'utilium';
 import type { Header } from './zip.js';
 import { computeEOCD, FileEntry } from './zip.js';
+import { getDynamic, isShared } from './utils.js';
 
 export interface ZipDataSource<TBuffer extends ArrayBufferLike = ArrayBuffer> {
 	readonly size: number;
+	readonly isShared: TBuffer extends SharedArrayBuffer ? true : false;
 	get(offset: number, length: number): Uint8Array<TBuffer> | Promise<Uint8Array<TBuffer>>;
 	set?(offset: number, data: ArrayBufferView<TBuffer>): void | Promise<void>;
 }
@@ -91,7 +93,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		const cdEnd = ptr + this.eocd.size;
 
 		while (ptr < cdEnd) {
-			const cd = await FileEntry.from<TBuffer>(this.data, ptr);
+			const cd = await getDynamic<FileEntry<TBuffer>, TBuffer>(FileEntry, this.data, ptr);
 
 			if (!this.lazy) await cd.loadContents();
 			/* 	Paths must be absolute,
@@ -218,8 +220,6 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	}
 }
 
-const _isShared = (b: unknown): b is SharedArrayBuffer => typeof b == 'object' && b !== null && b.constructor.name === 'SharedArrayBuffer';
-
 export function fromStream(stream: ReadableStream<Uint8Array>, size: number): ZipDataSource<ArrayBuffer> {
 	const data = new Uint8Array(size);
 
@@ -245,6 +245,7 @@ export function fromStream(stream: ReadableStream<Uint8Array>, size: number): Zi
 
 	return {
 		size,
+		isShared: false,
 		async get(offset, length) {
 			const view = data.subarray(offset, offset + length);
 			if (bytesRead >= offset + length) return view;
@@ -258,9 +259,10 @@ export function fromStream(stream: ReadableStream<Uint8Array>, size: number): Zi
 }
 
 function getSource<TBuffer extends ArrayBufferLike = ArrayBuffer>(input: ZipOptions<TBuffer>['data']): ZipDataSource<TBuffer> {
-	if (input instanceof ArrayBuffer || _isShared(input)) {
+	if (input instanceof ArrayBuffer || isShared(input)) {
 		return {
 			size: input.byteLength,
+			isShared: isShared(input) as TBuffer extends SharedArrayBuffer ? true : false,
 			get(offset: number, length: number) {
 				return new Uint8Array(input, offset, length);
 			},
@@ -273,6 +275,7 @@ function getSource<TBuffer extends ArrayBufferLike = ArrayBuffer>(input: ZipOpti
 	if (ArrayBuffer.isView(input)) {
 		return {
 			size: input.byteLength,
+			isShared: isShared(input.buffer) as TBuffer extends SharedArrayBuffer ? true : false,
 			get(offset: number, length: number) {
 				return new Uint8Array(input.buffer, input.byteOffset + offset, length);
 			},
