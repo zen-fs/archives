@@ -5,7 +5,7 @@ import { $from, struct, types as t } from 'memium/decorators';
 import { memoize } from 'utilium';
 import { CompressionMethod, decompressionMethods } from './compression.js';
 import type { ZipDataSource } from './fs.js';
-import { decodeString, getDynamic, fromMsdosDate } from './utils.js';
+import { decodeString, getDynamic, fromMsdosDate, toMsdosDate } from './utils.js';
 
 /**
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.2.2
@@ -31,6 +31,16 @@ export enum AttributeCompat {
 	TANDEM = 17,
 	OS_400 = 18,
 	OSX = 19,
+}
+
+/**
+ * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.4
+ */
+export enum ZipFlags {
+	Encrypted = 1 << 0,
+	LocalZeros = 1 << 3,
+	StrongEncryption = 1 << 6,
+	UseUTF8 = 1 << 11,
 }
 
 /**
@@ -77,6 +87,15 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 	 */
 	public get lastModified(): Date {
 		return fromMsdosDate(this.datetime);
+	}
+
+	/**
+	 * The date and time are encoded in standard MS-DOS format.
+	 * This getter decodes the date.
+	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.6
+	 */
+	public set lastModified(value: Date) {
+		this.datetime = toMsdosDate(value);
 	}
 
 	/**
@@ -240,6 +259,15 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	 */
 	public get lastModified(): Date {
 		return fromMsdosDate(this.datetime);
+	}
+
+	/**
+	 * The date and time are encoded in standard MS-DOS format.
+	 * This getter decodes the date.
+	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.6
+	 */
+	public set lastModified(value: Date) {
+		this.datetime = toMsdosDate(value);
 	}
 
 	/**
