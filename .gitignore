@@ -1,8 +1,12 @@
 node_modules
-.vscode
 dist
 docs
 *.log
 tmp
 build
-.coverage
+.*
+!.vscode
+!.github
+!.gitignore
+!.gitattributes
+!.prettierignore
