@@ -2,8 +2,9 @@
 	"compilerOptions": {
 		"module": "NodeNext",
 		"target": "ES2022",
+		"rootDir": "src",
 		"outDir": "dist",
-		"lib": ["ESNext", "DOM", "DOM.AsyncIterable"],
+		"lib": ["ESNext", "DOM"],
 		"moduleResolution": "NodeNext",
 		"types": ["node"],
 		"declaration": true,
