@@ -221,8 +221,8 @@ export async function getDynamic<T extends { readonly $size: number }, TBuffer e
 	extra: number = 1024
 ): Promise<T> {
 	const Buf = (source.isShared ? SharedArrayBuffer : ArrayBuffer) as any as new (size: number, options?: { maxByteLength?: number }) => TBuffer;
-	let buffer = new Buf(type.size, { maxByteLength: type.size + extra }),
-		data = new Uint8Array(buffer);
+	const buffer = new Buf(type.size, { maxByteLength: type.size + extra });
+	let data = new Uint8Array(buffer);
 	data.set(await source.get(offset, type.size));
 	const value = new type(buffer, 0) as T & { constructor: Type<T> };
 
@@ -230,7 +230,6 @@ export async function getDynamic<T extends { readonly $size: number }, TBuffer e
 		const bigger = new Buf(value.$size),
 			biggerData = new Uint8Array(bigger);
 		biggerData.set(data);
-		buffer = bigger;
 		data = biggerData;
 	} else if (source.isShared) (buffer as SharedArrayBuffer).grow(value.$size);
 	else (buffer as ArrayBuffer).resize(value.$size);
