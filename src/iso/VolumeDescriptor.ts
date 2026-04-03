@@ -2,7 +2,7 @@
 import { withErrno } from 'kerium';
 import { $from, field, struct, types as t } from 'memium/decorators';
 import { _throw, memoize } from 'utilium';
-import { BufferView } from 'utilium/buffer.js';
+import { BufferView } from 'utilium/buffer';
 import { DirectoryRecord } from './DirectoryRecord.js';
 import { EREntry, RREntry, SPEntry } from './entries.js';
 import { LongFormDate } from './misc.js';

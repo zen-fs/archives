@@ -131,7 +131,7 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 	 */
 	@t.uint16 public accessor extraLength!: number;
 
-	@t.uint8(0, { countedBy: 'nameLength' }) protected accessor _name!: Uint8Array;
+	@t.uint8(0, { countedBy: 'nameLength' }) public accessor _name!: Uint8Array;
 
 	/**
 	 * The name of the file, with optional relative path.
@@ -332,7 +332,7 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	 */
 	@t.uint32 public accessor headerRelativeOffset!: number;
 
-	@t.uint8(0, { countedBy: 'nameLength' }) protected accessor _name!: Uint8Array;
+	@t.uint8(0, { countedBy: 'nameLength' }) public accessor _name!: Uint8Array;
 
 	/**
 	 * The name of the file, with optional relative path.
@@ -360,7 +360,7 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	 */
 	@t.uint8(0, { countedBy: 'extraLength' }) public accessor extra!: Uint8Array;
 
-	@t.uint8(0, { countedBy: 'commentLength' }) protected accessor _comment!: Uint8Array;
+	@t.uint8(0, { countedBy: 'commentLength' }) public accessor _comment!: Uint8Array;
 
 	/**
 	 * The comment for this file

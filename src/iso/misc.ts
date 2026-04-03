@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 import { $from, struct, types as t } from 'memium/decorators';
 import { memoize } from 'utilium';
-import { BufferView } from 'utilium/buffer.js';
+import { BufferView } from 'utilium/buffer';
 
 @struct.packed()
 export class LongFormDate<T extends ArrayBufferLike = ArrayBuffer> extends $from(BufferView)<T> {

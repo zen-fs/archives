@@ -3,7 +3,7 @@ import { log, withErrno } from 'kerium';
 import { offsetof, sizeof } from 'memium';
 import { $from, field, struct, types as t } from 'memium/decorators';
 import { memoize } from 'utilium';
-import { BufferView } from 'utilium/buffer.js';
+import { BufferView } from 'utilium/buffer';
 import { Directory } from './Directory.js';
 import { SLComponentFlags } from './SLComponentRecord.js';
 import type { SystemUseEntry } from './entries.js';

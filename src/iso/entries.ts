@@ -2,7 +2,7 @@
 import { sizeof } from 'memium';
 import { struct, types as t } from 'memium/decorators';
 import { decodeUTF8, type Tuple } from 'utilium';
-import { BufferView } from 'utilium/buffer.js';
+import { BufferView } from 'utilium/buffer';
 import { SLComponentRecord } from './SLComponentRecord.js';
 import { LongFormDate, ShortFormDate } from './misc.js';
 
