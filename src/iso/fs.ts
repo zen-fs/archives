@@ -157,7 +157,7 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 
 		for (const part of path.split('/').slice(1)) {
 			if (!dir.isDirectory()) return;
-			const directory: Directory = dir.directory;
+			const { directory } = dir;
 			let next: DirectoryRecord | undefined = directory.get(part);
 			if (!next && this.options.caseFold) {
 				const foldedPart = this._caseFold(part);
