@@ -10,6 +10,7 @@ import { _throw } from 'utilium';
 import type { Header } from './zip.js';
 import { computeEOCD, FileEntry } from './zip.js';
 import { getDynamic, isShared } from './utils.js';
+import { _caseFold } from '../utils.js';
 
 export interface ZipDataSource<TBuffer extends ArrayBufferLike = ArrayBuffer> {
 	readonly size: number;
@@ -126,7 +127,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 			}
 			// Strip the trailing '/' if it exists
 			const name = cd.name.endsWith('/') ? cd.name.slice(0, -1) : cd.name;
-			this.files.set('/' + this._caseFold(name), cd);
+			this.files.set('/' + _caseFold(this, name), cd);
 			ptr += cd.$size;
 		}
 
@@ -134,7 +135,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		for (const entry of this.files.keys()) {
 			let { dir, base } = parse(entry);
 
-			dir = this._caseFold(dir);
+			dir = _caseFold(this, dir);
 			if (!this.directories.has(dir)) {
 				this.directories.set(dir, new Set());
 			}
@@ -146,7 +147,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		for (const entry of this.directories.keys()) {
 			let { dir, base } = parse(entry);
 
-			dir = this._caseFold(dir);
+			dir = _caseFold(this, dir);
 			if (base == '') continue;
 
 			if (!this.directories.has(dir)) {
@@ -160,7 +161,8 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	public constructor(
 		public label: string,
 		protected data: ZipDataSource<TBuffer>,
-		protected readonly options: ZipOptions<TBuffer>
+		/** @internal */
+		public readonly options: ZipOptions<TBuffer>
 	) {
 		super(0x207a6970, 'zipfs');
 	}
@@ -177,7 +179,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	}
 
 	public statSync(path: string): Inode {
-		const folded = this._caseFold(path);
+		const folded = _caseFold(this, path);
 		// The EOCD/Header does not track directories, so it does not exist in `entries`
 		if (this.directories.has(folded)) {
 			return this.inodeFor(folded, () => ({
@@ -205,7 +207,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		const inode = await this.stat(path);
 		if (!(inode.mode & S_IFDIR)) throw withErrno('ENOTDIR');
 
-		const entries = this.directories.get(this._caseFold(path));
+		const entries = this.directories.get(_caseFold(this, path));
 		if (!entries) throw withErrno('ENODATA');
 
 		return Array.from(entries);
@@ -215,14 +217,14 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		const inode = this.statSync(path);
 		if (!(inode.mode & S_IFDIR)) throw withErrno('ENOTDIR');
 
-		const entries = this.directories.get(this._caseFold(path));
+		const entries = this.directories.get(_caseFold(this, path));
 		if (!entries) throw withErrno('ENODATA');
 
 		return Array.from(entries);
 	}
 
 	public async read(path: string, buffer: Uint8Array, offset: number, end: number): Promise<void> {
-		const folded = this._caseFold(path);
+		const folded = _caseFold(this, path);
 		if (this.directories.has(folded)) throw withErrno('EISDIR');
 
 		const file = this.files.get(folded) ?? _throw(withErrno('ENOENT'));
@@ -233,7 +235,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	}
 
 	public readSync(path: string, buffer: Uint8Array, offset: number, end: number): void {
-		const folded = this._caseFold(path);
+		const folded = _caseFold(this, path);
 		if (this.directories.has(folded)) throw withErrno('EISDIR');
 
 		const file = this.files.get(folded) ?? _throw(withErrno('ENOENT'));
@@ -246,12 +248,6 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		buffer.set(file.contents.subarray(offset, end));
 	}
 
-	private _caseFold(original: string): string {
-		if (!this.options.caseFold) {
-			return original;
-		}
-		return this.options.caseFold == 'upper' ? original.toUpperCase() : original.toLowerCase();
-	}
 }
 
 export function fromStream(stream: ReadableStream<Uint8Array>, size: number): ZipDataSource<ArrayBuffer> {

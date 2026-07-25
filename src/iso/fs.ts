@@ -10,6 +10,7 @@ import type { Directory } from './Directory.js';
 import type { DirectoryRecord } from './DirectoryRecord.js';
 import { PrimaryVolumeDescriptor, VolumeDescriptorType } from './VolumeDescriptor.js';
 import { PXEntry, TFEntry, TFFlag } from './entries.js';
+import { _caseFold } from '../utils.js';
 
 /**
  * Options for IsoFS file system instances.
@@ -35,7 +36,8 @@ export interface IsoOptions extends SharedConfig {
  */
 export class IsoFS extends Readonly(Sync(FileSystem)) {
 	protected data: Uint8Array;
-	protected readonly options: IsoOptions;
+	/** @internal */
+	public readonly options: IsoOptions;
 	protected pvd: PrimaryVolumeDescriptor;
 
 	/**
@@ -157,31 +159,22 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 
 		for (const part of path.split('/').slice(1)) {
 			if (!dir.isDirectory()) return;
-			const { directory } = dir;
-			let next: DirectoryRecord | undefined = directory.get(part);
-			if (!next && this.options.caseFold) {
-				const foldedPart = this._caseFold(part);
-				for (const [name, record] of directory) {
-					if (this._caseFold(name) === foldedPart) {
-						next = record;
-						break;
-					}
-				}
-			}
-
-			dir = next;
+			dir = this._lookup(dir.directory, part);
 			if (!dir) return;
 		}
 
 		return dir;
 	}
 
-	private _caseFold(original: string): string {
-		if (!this.options.caseFold) {
-			return original;
-		}
+	/** Looks up an entry in a directory, falling back to a case-folded comparison if case folding is enabled */
+	private _lookup(directory: Directory, part: string): DirectoryRecord | undefined {
+		const record = directory.get(part);
+		if (record || !this.options.caseFold) return record;
 
-		return this.options.caseFold === 'upper' ? original.toUpperCase() : original.toLowerCase();
+		const folded = _caseFold(this, part);
+		for (const [name, entry] of directory) {
+			if (_caseFold(this, name) === folded) return entry;
+		}
 	}
 
 	private _get(path: string, record: DirectoryRecord): Inode | undefined {
