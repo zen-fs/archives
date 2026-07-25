@@ -247,7 +247,6 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 
 		buffer.set(file.contents.subarray(offset, end));
 	}
-
 }
 
 export function fromStream(stream: ReadableStream<Uint8Array>, size: number): ZipDataSource<ArrayBuffer> {
