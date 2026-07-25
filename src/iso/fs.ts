@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-import { FileSystem, Inode, type UsageInfo } from '@zenfs/core';
+import { FileSystem, Inode, type InodeLike, type UsageInfo } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/constants';
 import { Readonly, Sync } from '@zenfs/core/mixins/index.js';
@@ -34,6 +34,28 @@ export interface IsoOptions {
  */
 export class IsoFS extends Readonly(Sync(FileSystem)) {
 	protected pvd: PrimaryVolumeDescriptor;
+
+	/**
+	 * Inodes for each path.
+	 *
+	 * ISO images do not have inodes, so they are created on demand and kept.
+	 * This gives every file a stable, unique `ino`, which the VFS needs to tell files apart.
+	 * Keeping them also means metadata changes are not lost, though this file system is read-only.
+	 */
+	protected inodes: Map<string, Inode> = new Map();
+	private _nextIno: number = 1;
+
+	/** Gets the inode for a path, creating it with `create` if it does not exist yet */
+	protected inodeFor(path: string, create: () => Partial<InodeLike>): Inode {
+		let inode = this.inodes.get(path);
+
+		if (!inode) {
+			inode = new Inode({ ...create(), ino: this._nextIno++ });
+			this.inodes.set(path, inode);
+		}
+
+		return inode;
+	}
 
 	/**
 	 * Constructs a read-only file system from the given ISO.
@@ -164,13 +186,13 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 		}
 		// Mask out writeable flags. This is a RO file system.
 		mode &= 0o555;
-		return new Inode({
+		return this.inodeFor(path, () => ({
 			mode: mode | (record.isDirectory() ? S_IFDIR : S_IFREG),
 			size: record.dataLength,
 			atimeMs,
 			mtimeMs,
 			ctimeMs,
-		});
+		}));
 	}
 }
 

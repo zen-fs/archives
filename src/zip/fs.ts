@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-import { FileSystem, Inode, type UsageInfo } from '@zenfs/core';
+import { FileSystem, Inode, type InodeLike, type UsageInfo } from '@zenfs/core';
 import type { Backend } from '@zenfs/core/backends/backend.js';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/constants';
 import { Readonly } from '@zenfs/core/mixins/readonly.js';
@@ -68,6 +68,28 @@ export interface ZipOptions<TBuffer extends ArrayBufferLike = ArrayBuffer> {
 export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readonly(FileSystem) {
 	protected files: Map<string, FileEntry<TBuffer>> = new Map();
 	protected directories: Map<string, Set<string>> = new Map();
+
+	/**
+	 * Inodes for each path.
+	 *
+	 * Zip files do not have inodes, so they are created on demand and kept.
+	 * This gives every file a stable, unique `ino`, which the VFS needs to tell files apart.
+	 * Keeping them also means metadata changes are not lost, though this file system is read-only.
+	 */
+	protected inodes: Map<string, Inode> = new Map();
+	private _nextIno: number = 1;
+
+	/** Gets the inode for a path, creating it with `create` if it does not exist yet */
+	protected inodeFor(path: string, create: () => Partial<InodeLike>): Inode {
+		let inode = this.inodes.get(path);
+
+		if (!inode) {
+			inode = new Inode({ ...create(), ino: this._nextIno++ });
+			this.inodes.set(path, inode);
+		}
+
+		return inode;
+	}
 
 	protected _time = Date.now();
 	private _ready: boolean = false;
@@ -155,25 +177,25 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	public statSync(path: string): Inode {
 		// The EOCD/Header does not track directories, so it does not exist in `entries`
 		if (this.directories.has(path)) {
-			return new Inode({
+			return this.inodeFor(path, () => ({
 				mode: 0o555 | S_IFDIR,
 				size: 4096,
 				mtimeMs: this._time,
 				ctimeMs: this._time,
 				atimeMs: Date.now(),
 				birthtimeMs: this._time,
-			});
+			}));
 		}
 
 		const entry = this.files.get(path);
 
 		if (!entry) throw withErrno('ENOENT');
 
-		return new Inode({
+		return this.inodeFor(path, () => ({
 			mode: 0o555 | (entry.isDirectory ? S_IFDIR : S_IFREG),
 			size: entry.uncompressedSize,
 			mtimeMs: entry.lastModified.getTime(),
-		});
+		}));
 	}
 
 	public async readdir(path: string): Promise<string[]> {
