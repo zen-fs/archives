@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 import { FileSystem, Inode, type InodeLike, type UsageInfo } from '@zenfs/core';
-import type { Backend } from '@zenfs/core/backends/backend.js';
+import type { Backend, SharedConfig } from '@zenfs/core/backends/backend.js';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/constants';
 import { Readonly, Sync } from '@zenfs/core/mixins/index.js';
 import { resolve } from '@zenfs/core/path';
 import { log, withErrno } from 'kerium';
 import { decodeASCII } from 'utilium';
+import type { Directory } from './Directory.js';
 import type { DirectoryRecord } from './DirectoryRecord.js';
 import { PrimaryVolumeDescriptor, VolumeDescriptorType } from './VolumeDescriptor.js';
 import { PXEntry, TFEntry, TFFlag } from './entries.js';
+import { _caseFold } from '../utils.js';
 
 /**
  * Options for IsoFS file system instances.
  */
-export interface IsoOptions {
+export interface IsoOptions extends SharedConfig {
 	/**
 	 * The ISO file in a buffer.
 	 */
@@ -33,6 +35,9 @@ export interface IsoOptions {
  * * Microsoft Joliet and Rock Ridge extensions to the ISO9660 standard
  */
 export class IsoFS extends Readonly(Sync(FileSystem)) {
+	protected data: Uint8Array;
+	/** @internal */
+	public readonly options: IsoOptions;
 	protected pvd: PrimaryVolumeDescriptor;
 
 	/**
@@ -62,10 +67,15 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 	 * @param data The ISO file in a buffer.
 	 * @param name The name of the ISO (optional; used for debug messages / identification).
 	 */
-	public constructor(protected data: Uint8Array) {
+	public constructor(options: IsoOptions) {
 		super(0x2069736f, 'iso9660');
 
+		this.options = options;
+		this.data = options.data;
+		this.label = options.name;
+
 		let candidate: PrimaryVolumeDescriptor | undefined;
+		const data = this.data;
 
 		for (let i = 16 * 2048, terminatorFound = false; i < data.length && !terminatorFound; i += 2048) {
 			switch (data[i] as VolumeDescriptorType) {
@@ -149,11 +159,22 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 
 		for (const part of path.split('/').slice(1)) {
 			if (!dir.isDirectory()) return;
-			dir = dir.directory.get(part);
+			dir = this._lookup(dir.directory, part);
 			if (!dir) return;
 		}
 
 		return dir;
+	}
+
+	/** Looks up an entry in a directory, falling back to a case-folded comparison if case folding is enabled */
+	private _lookup(directory: Directory, part: string): DirectoryRecord | undefined {
+		const record = directory.get(part);
+		if (record || !this.options.caseFold) return record;
+
+		const folded = _caseFold(this, part);
+		for (const [name, entry] of directory) {
+			if (_caseFold(this, name) === folded) return entry;
+		}
 	}
 
 	private _get(path: string, record: DirectoryRecord): Inode | undefined {
@@ -205,9 +226,7 @@ const _Iso = {
 	},
 
 	create(options: IsoOptions) {
-		const fs = new IsoFS(options.data);
-		fs.label = options.name;
-		return fs;
+		return new IsoFS(options);
 	},
 } as const satisfies Backend<IsoFS, IsoOptions>;
 type _Iso = typeof _Iso;

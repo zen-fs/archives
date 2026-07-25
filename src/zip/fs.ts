@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 import { FileSystem, Inode, type InodeLike, type UsageInfo } from '@zenfs/core';
-import type { Backend } from '@zenfs/core/backends/backend.js';
+import type { Backend, SharedConfig } from '@zenfs/core/backends/backend.js';
 import { S_IFDIR, S_IFREG } from '@zenfs/core/constants';
 import { Readonly } from '@zenfs/core/mixins/readonly.js';
 import { parse } from '@zenfs/core/path';
@@ -10,6 +10,7 @@ import { _throw } from 'utilium';
 import type { Header } from './zip.js';
 import { computeEOCD, FileEntry } from './zip.js';
 import { getDynamic, isShared } from './utils.js';
+import { _caseFold } from '../utils.js';
 
 export interface ZipDataSource<TBuffer extends ArrayBufferLike = ArrayBuffer> {
 	readonly size: number;
@@ -21,7 +22,7 @@ export interface ZipDataSource<TBuffer extends ArrayBufferLike = ArrayBuffer> {
 /**
  * Configuration options for a ZipFS file system.
  */
-export interface ZipOptions<TBuffer extends ArrayBufferLike = ArrayBuffer> {
+export interface ZipOptions<TBuffer extends ArrayBufferLike = ArrayBuffer> extends SharedConfig {
 	/**
 	 * The zip file as a binary buffer.
 	 */
@@ -117,7 +118,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		while (ptr < cdEnd) {
 			const cd = await getDynamic<FileEntry<TBuffer>, TBuffer>(FileEntry, this.data, ptr);
 
-			if (!this.lazy) await cd.loadContents();
+			if (!this.options.lazy) await cd.loadContents();
 			/* 	Paths must be absolute,
 			yet zip file paths are always relative to the zip root.
 			So we prepend '/' and call it a day. */
@@ -126,14 +127,15 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 			}
 			// Strip the trailing '/' if it exists
 			const name = cd.name.endsWith('/') ? cd.name.slice(0, -1) : cd.name;
-			this.files.set('/' + name, cd);
+			this.files.set('/' + _caseFold(this, name), cd);
 			ptr += cd.$size;
 		}
 
 		// Parse directory entries
 		for (const entry of this.files.keys()) {
-			const { dir, base } = parse(entry);
+			let { dir, base } = parse(entry);
 
+			dir = _caseFold(this, dir);
 			if (!this.directories.has(dir)) {
 				this.directories.set(dir, new Set());
 			}
@@ -143,8 +145,9 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 
 		// Add subdirectories to their parent's entries
 		for (const entry of this.directories.keys()) {
-			const { dir, base } = parse(entry);
+			let { dir, base } = parse(entry);
 
+			dir = _caseFold(this, dir);
 			if (base == '') continue;
 
 			if (!this.directories.has(dir)) {
@@ -158,7 +161,8 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	public constructor(
 		public label: string,
 		protected data: ZipDataSource<TBuffer>,
-		public readonly lazy: boolean = false
+		/** @internal */
+		public readonly options: ZipOptions<TBuffer>
 	) {
 		super(0x207a6970, 'zipfs');
 	}
@@ -175,9 +179,10 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	}
 
 	public statSync(path: string): Inode {
+		const folded = _caseFold(this, path);
 		// The EOCD/Header does not track directories, so it does not exist in `entries`
-		if (this.directories.has(path)) {
-			return this.inodeFor(path, () => ({
+		if (this.directories.has(folded)) {
+			return this.inodeFor(folded, () => ({
 				mode: 0o555 | S_IFDIR,
 				size: 4096,
 				mtimeMs: this._time,
@@ -187,11 +192,11 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 			}));
 		}
 
-		const entry = this.files.get(path);
+		const entry = this.files.get(folded);
 
 		if (!entry) throw withErrno('ENOENT');
 
-		return this.inodeFor(path, () => ({
+		return this.inodeFor(folded, () => ({
 			mode: 0o555 | (entry.isDirectory ? S_IFDIR : S_IFREG),
 			size: entry.uncompressedSize,
 			mtimeMs: entry.lastModified.getTime(),
@@ -202,7 +207,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		const inode = await this.stat(path);
 		if (!(inode.mode & S_IFDIR)) throw withErrno('ENOTDIR');
 
-		const entries = this.directories.get(path);
+		const entries = this.directories.get(_caseFold(this, path));
 		if (!entries) throw withErrno('ENODATA');
 
 		return Array.from(entries);
@@ -212,16 +217,17 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		const inode = this.statSync(path);
 		if (!(inode.mode & S_IFDIR)) throw withErrno('ENOTDIR');
 
-		const entries = this.directories.get(path);
+		const entries = this.directories.get(_caseFold(this, path));
 		if (!entries) throw withErrno('ENODATA');
 
 		return Array.from(entries);
 	}
 
 	public async read(path: string, buffer: Uint8Array, offset: number, end: number): Promise<void> {
-		if (this.directories.has(path)) throw withErrno('EISDIR');
+		const folded = _caseFold(this, path);
+		if (this.directories.has(folded)) throw withErrno('EISDIR');
 
-		const file = this.files.get(path) ?? _throw(withErrno('ENOENT'));
+		const file = this.files.get(folded) ?? _throw(withErrno('ENOENT'));
 
 		if (!file.contents) await file.loadContents();
 
@@ -229,9 +235,10 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 	}
 
 	public readSync(path: string, buffer: Uint8Array, offset: number, end: number): void {
-		if (this.directories.has(path)) throw withErrno('EISDIR');
+		const folded = _caseFold(this, path);
+		if (this.directories.has(folded)) throw withErrno('EISDIR');
 
-		const file = this.files.get(path) ?? _throw(withErrno('ENOENT'));
+		const file = this.files.get(folded) ?? _throw(withErrno('ENOENT'));
 
 		if (!file.contents) {
 			void file.loadContents();
@@ -318,16 +325,7 @@ const _Zip = {
 	name: 'Zip',
 
 	options: {
-		data: {
-			type: [
-				ArrayBuffer,
-				Object.getPrototypeOf(Uint8Array) /* %TypedArray% */,
-				function ZipDataSource(v: unknown): v is ZipDataSource {
-					return typeof v == 'object' && v !== null && 'size' in v && typeof v.size == 'number' && 'get' in v && typeof v.get == 'function';
-				},
-			],
-			required: true,
-		},
+		data: { type: 'object', required: true },
 		name: { type: 'string', required: false },
 		lazy: { type: 'boolean', required: false },
 	},
@@ -337,7 +335,7 @@ const _Zip = {
 	},
 
 	create<TBuffer extends ArrayBufferLike = ArrayBuffer>(opt: ZipOptions<TBuffer>): ZipFS<TBuffer> {
-		return new ZipFS<TBuffer>(opt.name ?? '', getSource(opt.data), opt.lazy);
+		return new ZipFS<TBuffer>(opt.name ?? '', getSource(opt.data), opt);
 	},
 } satisfies Backend<ZipFS, ZipOptions>;
 type _Zip = typeof _Zip;
