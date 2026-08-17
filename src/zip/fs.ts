@@ -17,6 +17,10 @@ export interface ZipDataSource<TBuffer extends ArrayBufferLike = ArrayBuffer> {
 	readonly isShared: TBuffer extends SharedArrayBuffer ? true : false;
 	get(offset: number, length: number): Uint8Array<TBuffer> | Promise<Uint8Array<TBuffer>>;
 	set?(offset: number, data: ArrayBufferView<TBuffer>): void | Promise<void>;
+
+	// Used for significantly fast performance when used with a regular `ArrayBuffer`/`ArrayBufferView`. See issue #19
+	_buffer?: TBuffer;
+	_offset?: number;
 }
 
 /**
@@ -298,6 +302,8 @@ function getSource<TBuffer extends ArrayBufferLike = ArrayBuffer>(input: ZipOpti
 			set(offset, data) {
 				new Uint8Array(input, offset, data.byteLength).set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
 			},
+			_buffer: input,
+			_offset: 0,
 		};
 	}
 
@@ -311,6 +317,8 @@ function getSource<TBuffer extends ArrayBufferLike = ArrayBuffer>(input: ZipOpti
 			set(offset, data) {
 				new Uint8Array(input.buffer, input.byteOffset + offset, data.byteLength).set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
 			},
+			_buffer: input.buffer,
+			_offset: input.byteOffset,
 		};
 	}
 

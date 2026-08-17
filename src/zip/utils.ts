@@ -188,12 +188,15 @@ export const extendedASCIIChars = [
 	' ',
 ];
 
+/** Every byte's decoded character, so decoding is an array index rather than a branch and a call. */
+const extendedASCIITable: string[] = Array.from({ length: 256 }, (_, byte) => (byte > 127 ? extendedASCIIChars[byte - 128] : String.fromCharCode(byte)));
+
 export function decodeString(value: Uint8Array, utf8: boolean) {
-	if (utf8) {
-		return decodeUTF8(value);
-	} else {
-		return [...value].map(char => (char > 127 ? extendedASCIIChars[char - 128] : String.fromCharCode(char))).join('');
-	}
+	if (utf8) return decodeUTF8(value);
+
+	let decoded = '';
+	for (let i = 0; i < value.length; i++) decoded += extendedASCIITable[value[i]];
+	return decoded;
 }
 
 /**
@@ -220,6 +223,12 @@ export async function getDynamic<T extends { readonly $size: number }, TBuffer e
 	offset: number,
 	extra: number = 1024
 ): Promise<T> {
+	if (source._buffer) {
+		const value = new type(source._buffer, source._offset! + offset);
+		(value as { _source?: unknown })._source = source;
+		return value;
+	}
+
 	const Buf = (source.isShared ? SharedArrayBuffer : ArrayBuffer) as any as new (size: number, options?: { maxByteLength?: number }) => TBuffer;
 	const buffer = new Buf(type.size, { maxByteLength: type.size + extra });
 	let data = new Uint8Array(buffer);

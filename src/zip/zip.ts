@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 import { log, withErrno } from 'kerium';
-import { sizeof, type Type } from 'memium';
+import type { Type } from 'memium';
 import { $from, struct, types as t } from 'memium/decorators';
 import { memoize } from 'utilium';
 import { CompressionMethod, decompressionMethods } from './compression.js';
@@ -46,7 +46,7 @@ export enum ZipFlags {
 /**
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.7
  */
-@struct.packed({ isDynamic: true })
+@struct.packed({ isDynamic: true, fastFields: true })
 export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	static name = 'LocalFileHeader';
 
@@ -133,14 +133,16 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 
 	@t.uint8(0, { countedBy: 'nameLength' }) public accessor _name!: Uint8Array;
 
+	#name?: string;
+
 	/**
 	 * The name of the file, with optional relative path.
 	 * @see CentralDirectory.fileName
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.17
 	 */
-	@memoize
 	get name(): string {
-		return decodeString(this._name, this.useUTF8);
+		this.#name ??= decodeString(this._name, this.useUTF8);
+		return this.#name;
 	}
 
 	/**
@@ -149,8 +151,11 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 	 */
 	@t.uint8(0, { countedBy: 'extraLength' }) public accessor extra!: Uint8Array;
 
+	#size?: number;
+
 	public get $size(): number {
-		return LocalFileHeader.size + this.nameLength + this.extraLength;
+		this.#size ??= LocalFileHeader.size + this.nameLength + this.extraLength;
+		return this.#size;
 	}
 
 	public get useUTF8(): boolean {
@@ -162,7 +167,7 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
  * Archive extra data record
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.11
  */
-@struct.packed({ isDynamic: true })
+@struct.packed({ isDynamic: true, fastFields: true })
 export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	static name = 'ExtraDataRecord';
 
@@ -191,7 +196,7 @@ export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
  * This is a file metadata entry inside the "central directory".
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.12
  */
-@struct.packed({ isDynamic: true })
+@struct.packed({ isDynamic: true, fastFields: true })
 export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	static name = 'FileEntry';
 
@@ -334,6 +339,8 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 
 	@t.uint8(0, { countedBy: 'nameLength' }) public accessor _name!: Uint8Array;
 
+	#name?: string;
+
 	/**
 	 * The name of the file, with optional relative path.
 	 * The filename is preloaded here, since looking it up is expensive.
@@ -349,9 +356,9 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	 * To avoid seeking all over the file to recover the known-good filenames from file headers, we simply convert '\' to '/' here.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.17
 	 */
-	@memoize
 	get name(): string {
-		return decodeString(this._name, this.useUTF8);
+		this.#name ??= decodeString(this._name, this.useUTF8);
+		return this.#name;
 	}
 
 	/**
@@ -362,20 +369,25 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 
 	@t.uint8(0, { countedBy: 'commentLength' }) public accessor _comment!: Uint8Array;
 
+	#comment?: string;
+
 	/**
 	 * The comment for this file
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.18
 	 */
-	@memoize
 	get comment(): string {
-		return decodeString(this._comment, this.useUTF8);
+		this.#comment ??= decodeString(this._comment, this.useUTF8);
+		return this.#comment;
 	}
+
+	#size?: number;
 
 	/**
 	 * The total size of the this entry
 	 */
 	public get $size(): number {
-		return sizeof(FileEntry) + this.nameLength + this.extraLength + this.commentLength;
+		this.#size ??= this.constructor.size + this.nameLength + this.extraLength + this.commentLength;
+		return this.#size;
 	}
 
 	/**
@@ -432,7 +444,7 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
  * Digital signature
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.13
  */
-@struct.packed({ isDynamic: true })
+@struct.packed({ isDynamic: true, fastFields: true })
 export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	static name = 'DigitalSignature';
 
@@ -458,7 +470,7 @@ export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> ext
  * Internally, ZIP files have only a single directory: the "central directory".
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.16
  */
-@struct.packed({ isDynamic: true })
+@struct.packed({ isDynamic: true, fastFields: true })
 export class Header<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
 	static name = 'Header';
 
@@ -523,6 +535,7 @@ export class Header<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from
 		return decodeString(this._comment, true);
 	}
 
+	@memoize
 	public get $size(): number {
 		return Header.size + this.commentLength;
 	}
