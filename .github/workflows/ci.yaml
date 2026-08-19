@@ -40,7 +40,7 @@ jobs:
               run: npm run build
 
             - name: Unit tests (common)
-              run: npx zenfs-test -pvf --common
+              run: npx zenfs-test -pv --common
 
             - name: Unit tests (Zip)
               run: npx zenfs-test -pvf tests/setup-zip.ts
