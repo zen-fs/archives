@@ -248,7 +248,7 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 	}
 
 	/**
-	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.5
+	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.5%20compression%20method
 	 */
 	@t.uint16 public accessor compressionMethod!: CompressionMethod;
 
@@ -411,19 +411,29 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 		return !this.isDirectory;
 	}
 
-	async loadContents(): Promise<void> {
-		// Get the local header before we can figure out where the actual compressed data starts.
+	loadContents(force: boolean = false): void | Promise<void> {
+		if (this.contents && !force) return;
 
-		const { compressionMethod, $size, name } = await getDynamic<LocalFileHeader, TBuffer>(LocalFileHeader, this._source, this.headerRelativeOffset);
+		if (!this._source._buffer) return this._loadContentsAsync();
 
+		const { $size } = new LocalFileHeader(this._source._buffer, this._source._offset! + this.headerRelativeOffset);
+		const data = new Uint8Array(this._source._buffer, this._source._offset! + this.headerRelativeOffset + $size, this.compressedSize);
+		this._setContent(data);
+	}
+
+	private async _loadContentsAsync(): Promise<void> {
+		const { $size } = await getDynamic<LocalFileHeader, TBuffer>(LocalFileHeader, this._source, this.headerRelativeOffset);
 		const data = await this._source.get(this.headerRelativeOffset + $size, this.compressedSize);
-		// Check the compression
-		const decompress = decompressionMethods[compressionMethod];
+		this._setContent(data);
+	}
+
+	private _setContent(compressed: Uint8Array) {
+		const decompress = decompressionMethods[this.compressionMethod];
 		if (typeof decompress != 'function') {
-			const mname: string = compressionMethod in CompressionMethod ? CompressionMethod[compressionMethod] : compressionMethod.toString();
-			throw withErrno('EINVAL', `Invalid compression method on file "${name}": ${mname}`);
+			const mname: string = this.compressionMethod in CompressionMethod ? CompressionMethod[this.compressionMethod] : this.compressionMethod.toString();
+			throw withErrno('EINVAL', `Invalid compression method on file "${this.name}": ${mname}`);
 		}
-		this.contents = decompress(data, this.compressedSize, this.uncompressedSize, this.flag);
+		this.contents = decompress(compressed, this.compressedSize, this.uncompressedSize, this.flag);
 	}
 
 	/**

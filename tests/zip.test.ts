@@ -69,6 +69,20 @@ await suite('ZIP case fold', {}, () => {
 	});
 });
 
+await suite('ZIP lazy sync reads #20', () => {
+	test('Configure', async () => {
+		const buffer = readFileSync(import.meta.dirname + '/files/data.zip');
+		const data = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+		await configureSingle({ backend: Zip, data, lazy: true });
+	});
+
+	test('first read of an entry does not throw EAGAIN', () => {
+		assert.equal(fs.readFileSync('/nested/omg.txt', 'utf8'), 'This is a nested file!');
+	});
+
+	_runTests();
+});
+
 await using handle = await open(import.meta.dirname + '/files/data.zip');
 
 await suite('ZIP Streaming', () => {

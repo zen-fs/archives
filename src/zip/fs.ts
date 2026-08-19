@@ -244,10 +244,8 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 
 		const file = this.files.get(folded) ?? _throw(withErrno('ENOENT'));
 
-		if (!file.contents) {
-			void file.loadContents();
+		if (!file.contents && file.loadContents()?.catch(e => err('zipfs: unexpected rejection from loadContents(): ' + (Error.isError(e) ? e.message : String(e)))))
 			throw withErrno('EAGAIN');
-		}
 
 		buffer.set(file.contents.subarray(offset, end));
 	}
