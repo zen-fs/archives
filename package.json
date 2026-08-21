@@ -43,7 +43,7 @@
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
 		"lint": "eslint src",
-		"test": "npx -s zenfs-test -abcf",
+		"test": "npx -s zenfs-test -abc",
 		"build": "tsc -p tsconfig.json",
 		"build:docs": "typedoc",
 		"prepublishOnly": "npm run build"
