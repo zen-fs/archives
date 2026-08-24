@@ -5,7 +5,7 @@
 
 import { array, struct, types as t } from 'memium';
 
-export const magic = 'ustar\0';
+export const magic = 'ustar';
 export const version = '00';
 
 function _char(ascii: string) {
@@ -203,7 +203,7 @@ export const OldgnuHeader = struct.packed('oldgnu_header', {
    Found in an archive, it indicates an old GNU header format, which will be
    hopefully become obsolescent.  With OLDGNU_MAGIC, uname and gname are
    valid, though the header is not truly POSIX conforming.  */
-export const oldgnuMagic = 'ustar \0';
+export const oldgnuMagic = 'ustar ';
 
 /* The standards committee allows only capital A through capital Z for
    user-defined expansion.  Letters in use in other implementations include:

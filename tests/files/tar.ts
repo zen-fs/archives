@@ -1,8 +1,9 @@
-import * as tar from '../../src/tar/headers.ts';
+import * as io from 'ioium/node';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs, styleText, type InspectColor } from 'node:util';
-import * as io from 'ioium/node';
+import { decodeUTF8 } from 'utilium';
+import * as tar from '../../src/tar/headers.ts';
 
 const {
 	values: options,
@@ -11,6 +12,7 @@ const {
 	options: {
 		extra: { short: 'x', type: 'boolean', default: false },
 		verbose: { short: 'v', type: 'boolean', default: false },
+		content: { short: 'c', type: 'boolean', default: false },
 	},
 	strict: true,
 	allowPositionals: true,
@@ -60,22 +62,28 @@ function dumpFull(entry: tar.Entry): void {
 }
 
 for (let off = 0; off + 512 < data.length; off += 512) {
-	const header = new tar.PosixHeader(data.buffer, data.byteOffset + off, data.byteLength);
+	const header = new tar.PosixHeader(data.buffer, data.byteOffset + off, 512);
 
 	if (tar.decodeString(header.magic) !== tar.magic) {
-		console.log(`skipping 0x${off.toString(16)}, bad magic`);
+		io.debug(`skipping 0x${off.toString(16)}, bad magic`);
 		continue;
 	}
 
 	const entry = header.toEntry();
 
-	if (options.extra) dumpFull(entry);
-	else dumpLine(entry);
+	if (options.extra) {
+		console.log(`at 0x${off.toString(16)}:`);
+		dumpFull(entry);
+	} else dumpLine(entry);
 
 	if (entry.size) {
 		const alignedSize = Math.ceil(entry.size / 512) * 512;
 		off += alignedSize;
-		const content = new Uint8Array(data.buffer, header.byteOffset + 512, alignedSize);
+		const content = new Uint8Array(data.buffer, header.byteOffset + 512, entry.size);
+		if (options.content) {
+			console.log('Content:');
+			console.log(styleText('yellow', decodeUTF8(content)));
+		}
 		io.debug('skipping forward', alignedSize / 512, 'blocks');
 	}
 }
