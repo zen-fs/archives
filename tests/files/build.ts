@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import * as io from 'ioium/node';
+import { execFileSync } from 'node:child_process';
 
 const _isoCommon = (target: string, source: string, vol = '-V') => ['-quiet', vol, 'CDROM', '-o', target, source];
 
@@ -16,7 +17,21 @@ const formats = {
 			xorrisofs: (out, src) => [..._isoCommon(out, src), '--norock'],
 			hdiutil: (out, src) => ['makehybrid', '-quiet', '-iso', ..._isoCommon(out, src, '-default-volume-name')],
 		},
-		tar: {},
+		tar: {
+			tar(out, src) {
+				const isGNU = execFileSync('tar', ['--version'], { encoding: 'utf8' }).includes('GNU tar');
+
+				return [
+					'--create',
+					'--format=ustar',
+					'--file',
+					out,
+					src,
+					'--numeric-owner',
+					...(isGNU ? ['--owner=0', '--group=0'] : ['--uid', '0', '--gid', '0', '--uname', '', '--gname', '']),
+				];
+			},
+		},
 	} satisfies Record<string, Record<string, (targetPath: string, sourcedir: string) => string[]>>,
 	formatsNames = Object.keys(formats);
 

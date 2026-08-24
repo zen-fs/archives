@@ -12,7 +12,7 @@
 		"strict": true,
 		"verbatimModuleSyntax": true
 	},
-	"include": ["src/**/*"],
+	"include": ["src/**/*", "src/**/.*"],
 	"exclude": ["node_modules"],
 	"typedocOptions": {
 		"entryPoints": ["./src/index.ts"],
