@@ -68,26 +68,35 @@ Options:
 	process.exit();
 }
 
-for (const name of ['data', 'core'] as const)
+const fileNames = ['data', 'core'] as const;
+
+for (const name of fileNames) {
 	if (!fs.statSync(options[name], { throwIfNoEntry: false })?.isDirectory()) {
 		io.exit(`--${name}: invalid or inaccessible directory, ${options[name]}`);
 	}
+}
 
-iter_format: for (const formatName of options.format) {
+for (const formatName of options.format) {
 	const format = formats[formatName as keyof typeof formats];
 
 	if (!format) io.exit(`Invalid format: ${formatName}`);
 
+	const formatFilesNeeded: ('data' | 'core')[] = [];
+
+	for (const name of fileNames) {
+		const file = `${name}.${formatName}`;
+		if (options.incremental && fs.existsSync(join(options.output, file))) {
+			io.debug('--incremental: skipping ' + file);
+		} else formatFilesNeeded.push(name);
+	}
+
+	if (!formatFilesNeeded.length) continue;
+
 	for (const [command, getArgs] of Object.entries(format)) {
 		if (!io.trackCommand({ text: 'Checking for ' + command, ignoreCode: true }, 'command', '-v', command)) continue;
 
-		for (const name of ['data', 'core'] as const) {
+		for (const name of formatFilesNeeded) {
 			const file = `${name}.${formatName}`;
-
-			if (options.incremental && fs.existsSync(join(options.output, file))) {
-				io.debug('Skipping ' + file);
-				continue;
-			}
 
 			try {
 				const args = getArgs(join(options.output, file), options[name]);
@@ -99,6 +108,6 @@ iter_format: for (const formatName of options.format) {
 			}
 		}
 
-		continue iter_format;
+		break;
 	}
 }
