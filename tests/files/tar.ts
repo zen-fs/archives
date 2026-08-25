@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs, styleText, type InspectColor } from 'node:util';
 import { decodeUTF8 } from 'utilium';
-import * as tar from '../../src/tar/headers.ts';
+import * as tar from '../../src/tar/tar.ts';
 
 const {
 	values: options,
@@ -50,12 +50,13 @@ function dumpFull(entry: tar.Entry): void {
 		['mode', entry.mode.toString(8)],
 		['type', entry.type.toString(), `(${tar.TypeFlag[entry.type]})`],
 		entry.type !== tar.TypeFlag.Dir && ['size', styleText('blue', entry.size.toString()), `(${nBlocks} blocks)`],
+		['mtime', styleText('green', entry.mtime.toString())],
 		entry.type === tar.TypeFlag.Sym && ['link', entry.linkname],
 		['owner', 'uid=' + entry.uid + (entry.uname.length ? `(${entry.uname})` : ''), 'gid=' + entry.gid + (entry.gname.length ? `(${entry.gname})` : '')],
 		['device', styleText('yellow', entry.devmajor.toString()) + ':' + styleText('yellow', entry.devminor.toString())],
-		['version', entry.version.toString()],
+		typeof entry.version == 'number' && ['version', entry.version.toString()],
 		['checksum', '0x' + entry.chksum.toString(16)],
-		['prefix', entry.prefix],
+		entry.prefix && ['prefix', entry.prefix],
 	].filter<string[]>(row => !!row)) {
 		console.log(label.padEnd(8), ':', ...value);
 	}
@@ -64,15 +65,18 @@ function dumpFull(entry: tar.Entry): void {
 for (let off = 0; off + 512 < data.length; off += 512) {
 	const header = new tar.PosixHeader(data.buffer, data.byteOffset + off, 512);
 
-	if (tar.decodeString(header.magic) !== tar.magic) {
-		io.debug(`skipping 0x${off.toString(16)}, bad magic`);
+	const offStr = '0x' + off.toString(16);
+
+	if (tar.decodeString(header.magic) === tar.oldgnuMagic) io.debug(offStr, 'has oldgnu magic');
+	else if (tar.decodeString(header.magic) !== tar.magic) {
+		io.debug(`skipping ${offStr}, bad magic`);
 		continue;
 	}
 
 	const entry = header.toEntry();
 
 	if (options.extra) {
-		console.log(`at 0x${off.toString(16)}:`);
+		console.log(`at ${offStr}:`);
 		dumpFull(entry);
 	} else dumpLine(entry);
 

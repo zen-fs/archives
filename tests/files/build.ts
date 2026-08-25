@@ -42,10 +42,14 @@ const { values: options } = parseArgs({
 		'keep-going': { short: 'k', type: 'boolean', default: false },
 		output: { short: 'o', type: 'string', default: import.meta.dirname },
 		format: { short: 'f', type: 'string', multiple: true, default: formatsNames },
+		'dry-run': { type: 'boolean', default: false },
+		verbose: { short: 'v', type: 'boolean', default: false },
 		help: { short: 'h', type: 'boolean', default: false },
 	},
 	strict: true,
 });
+
+if (options.verbose) io._setDebugOutput(true);
 
 if (options.help) {
 	console.log(`Usage: ${import.meta.filename} [options]
@@ -55,6 +59,8 @@ Options:
     -o, --output <dir>   Path to place built archives
         --data <path>    Path to @zenfs/archives test data directory
         --core <path>    Path to @zenfs/core test data directory
+        --dry-run        Don't actually write the files
+    -v, --verbose        Show verbose output
     -h, --help           Show this message
 	`);
 	process.exit();
@@ -77,7 +83,9 @@ for (const formatName of options.format) {
 			const file = `${name}.${formatName}`;
 
 			try {
-				io.trackCommand('Creating ' + file, command, ...getArgs(join(options.output, file), options[name]));
+				const args = getArgs(join(options.output, file), options[name]);
+				io.debug('command:', command, ...args);
+				if (!options['dry-run']) io.trackCommand('Creating ' + file, command, ...args);
 			} catch (e) {
 				if (options['keep-going']) continue;
 				throw e;

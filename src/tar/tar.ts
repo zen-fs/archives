@@ -3,6 +3,7 @@
 /* tar Header Block, from POSIX 1003.1-2024
    <https://pubs.opengroup.org/onlinepubs/9799919799/utilities/pax.html#tagtcjh_21>  */
 
+import * as constants from '@zenfs/core/constants';
 import { array, struct, types as t } from 'memium';
 
 export const magic = 'ustar';
@@ -39,15 +40,16 @@ export interface Entry {
 	uid: number;
 	gid: number;
 	size: number;
+	mtime: number;
 	chksum: number;
 	type: TypeFlag;
 	linkname: string;
-	version: number;
+	version?: number;
 	uname: string;
 	gname: string;
 	devmajor: number;
 	devminor: number;
-	prefix: string;
+	prefix?: string;
 }
 
 /** POSIX header. */
@@ -70,22 +72,28 @@ export class PosixHeader extends struct.packed('posix_header', {
 	prefix: t.char(155),
 }) {
 	toEntry() {
-		return {
+		const entry: Entry = {
 			name: decodeString(this.name),
 			mode: oct2bin(this.mode),
 			uid: oct2bin(this.uid),
 			gid: oct2bin(this.gid),
 			size: oct2bin(this.size),
+			mtime: oct2bin(this.mtime),
 			chksum: oct2bin(this.chksum),
 			type: this.typeflag,
 			linkname: decodeString(this.linkname),
-			version: oct2bin(this.version),
 			uname: decodeString(this.uname),
 			gname: decodeString(this.gname),
 			devmajor: oct2bin(this.devmajor),
 			devminor: oct2bin(this.devminor),
-			prefix: decodeString(this.prefix),
 		};
+
+		if (decodeString(this.magic) === oldgnuMagic) {
+			entry.prefix = decodeString(this.prefix);
+			entry.version = oct2bin(this.version);
+		}
+
+		return entry;
 	}
 }
 
@@ -104,34 +112,19 @@ export enum TypeFlag {
 	Xgl = _char('g'),
 }
 
-/** Bits used in the mode field, values in octal. */
-export enum Mode {
-	/** set UID on execution */
-	SUID = 0o4000,
-	/** set GID on execution */
-	SGID = 0o2000,
-	/** reserved */
-	SVTX = 0o1000,
-	// file permissions
-	/** read by owner */
-	UREAD = 0o0400,
-	/** write by owner */
-	UWRITE = 0o0200,
-	/** execute/search by owner */
-	UEXEC = 0o0100,
-	/** read by group */
-	GREAD = 0o0040,
-	/** write by group */
-	GWRITE = 0o0020,
-	/** execute/search by group */
-	GEXEC = 0o0010,
-	/** read by other */
-	OREAD = 0o0004,
-	/** write by other */
-	OWRITE = 0o0002,
-	/** execute/search by other */
-	OEXEC = 0o0001,
-}
+export const typeMap = {
+	[TypeFlag.Reg]: constants.S_IFREG,
+	[TypeFlag.AReg]: constants.S_IFREG,
+	[TypeFlag.Lnk]: constants.S_IFLNK,
+	[TypeFlag.Sym]: constants.S_IFLNK,
+	[TypeFlag.Chr]: constants.S_IFCHR,
+	[TypeFlag.Blk]: constants.S_IFBLK,
+	[TypeFlag.Dir]: constants.S_IFDIR,
+	[TypeFlag.Fifo]: constants.S_IFIFO,
+	[TypeFlag.Cont]: constants.S_IFREG,
+	[TypeFlag.Xhd]: constants.S_IFREG,
+	[TypeFlag.Xgl]: constants.S_IFREG,
+} satisfies Record<TypeFlag, number>;
 
 /* tar Header Block, GNU extensions.  */
 

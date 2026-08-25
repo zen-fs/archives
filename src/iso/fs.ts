@@ -36,8 +36,6 @@ export interface IsoOptions extends SharedConfig {
  */
 export class IsoFS extends Readonly(Sync(FileSystem)) {
 	protected data: Uint8Array;
-	/** @internal */
-	public readonly options: IsoOptions;
 	protected pvd: PrimaryVolumeDescriptor;
 
 	/**
@@ -67,10 +65,9 @@ export class IsoFS extends Readonly(Sync(FileSystem)) {
 	 * @param data The ISO file in a buffer.
 	 * @param name The name of the ISO (optional; used for debug messages / identification).
 	 */
-	public constructor(options: IsoOptions) {
+	public constructor(public readonly options: IsoOptions) {
 		super(0x2069736f, 'iso9660');
 
-		this.options = options;
 		this.data = options.data;
 		this.label = options.name;
 
