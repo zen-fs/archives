@@ -27,7 +27,9 @@ const formats = {
 					'--format=ustar',
 					'--file',
 					out,
+					'--directory',
 					src,
+					'.',
 					'--numeric-owner',
 					...(isGNU ? ['--owner=0', '--group=0'] : ['--uid', '0', '--gid', '0', '--uname', '', '--gname', '']),
 				];

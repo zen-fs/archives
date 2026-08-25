@@ -1,7 +1,7 @@
 import type { Backend, SharedConfig, UsageInfo } from '@zenfs/core';
 import { FileSystem, Inode, isDirectory, Readonly, Sync } from '@zenfs/core';
 import { S_IFDIR } from '@zenfs/core/constants';
-import { basename, dirname } from '@zenfs/core/path';
+import { basename, dirname, resolve } from '@zenfs/core/path';
 import { withErrno } from 'kerium';
 import { pick } from 'utilium';
 import { _caseFold } from '../utils.js';
@@ -24,7 +24,7 @@ export class TarFS extends Readonly(Sync(FileSystem)) {
 	protected files: Map<string, Uint8Array> = new Map();
 	protected directories: Map<string, Set<string>> = new Map([['/', new Set()]]);
 
-	protected inodes: Map<string, Inode> = new Map([['/', new Inode({ mode: 0o755 | S_IFDIR, ino: 0 })]]);
+	protected inodes: Map<string, Inode> = new Map();
 	#nextIno: number = 1;
 
 	public constructor(public readonly options: TarOptions) {
@@ -47,9 +47,9 @@ export class TarFS extends Readonly(Sync(FileSystem)) {
 
 			const entry = header.toEntry();
 
-			const name = entry.name.at(-1) === '/' ? entry.name.slice(0, -1) : entry.name;
-
-			const folded = _caseFold(this, '/' + name);
+			// @todo handle prefix
+			const name = resolve(entry.name);
+			const folded = _caseFold(this, name);
 
 			this.inodes.set(
 				folded,
@@ -61,6 +61,7 @@ export class TarFS extends Readonly(Sync(FileSystem)) {
 					ino: ++this.#nextIno,
 				})
 			);
+			// Invariant: root entry must come before others, otherwise we overwrite the existing directory entries
 			if (entry.type == tar.TypeFlag.Dir) this.directories.set(folded, new Set());
 			else if (!entry.size) {
 				debug(`tarfs: file is empty, ${name}`);
@@ -71,6 +72,10 @@ export class TarFS extends Readonly(Sync(FileSystem)) {
 				off += nBlocks * 512;
 				debug(`tarfs: skipping forward ${nBlocks} blocks`);
 			}
+
+			if (folded === '/') continue;
+
+			if (!this.inodes.has('/')) this.inodes.set('/', new Inode({ mode: 0o755 | S_IFDIR, ino: 0 }));
 
 			const dir = this.directories.get(dirname(folded));
 			if (dir) dir.add(basename(folded));

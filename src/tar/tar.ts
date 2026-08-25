@@ -89,8 +89,9 @@ export class PosixHeader extends struct.packed('posix_header', {
 		};
 
 		if (decodeString(this.magic) === oldgnuMagic) {
-			entry.prefix = decodeString(this.prefix);
 			entry.version = oct2bin(this.version);
+		} else {
+			entry.prefix = decodeString(this.prefix);
 		}
 
 		return entry;
