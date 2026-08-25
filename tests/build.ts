@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as fs from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import * as io from 'ioium/node';
 import { execFileSync } from 'node:child_process';
@@ -10,7 +10,7 @@ const _isoCommon = (target: string, source: string, vol = '-V') => ['-quiet', vo
 const formats = {
 		zip: {
 			// @todo use built-in `createZipArchiveSync()`, see https://github.com/nodejs/node/pull/64339
-			zip: (out, src) => ['-o', '--quiet', '-X', out, src],
+			zip: out => ['-o', '--quiet', '-X', out, '-r', '.'],
 		},
 		iso: {
 			genisoimage: _isoCommon,
@@ -27,8 +27,6 @@ const formats = {
 					'--format=ustar',
 					'--file',
 					out,
-					'--directory',
-					src,
 					'.',
 					'--numeric-owner',
 					...(isGNU ? ['--owner=0', '--group=0'] : ['--uid', '0', '--gid', '0', '--uname', '', '--gname', '']),
@@ -73,10 +71,13 @@ Options:
 
 const fileNames = ['data', 'core'] as const;
 
+options.output = resolve(options.output);
+
 for (const name of fileNames) {
 	if (!fs.statSync(options[name], { throwIfNoEntry: false })?.isDirectory()) {
 		io.exit(`--${name}: invalid or inaccessible directory, ${options[name]}`);
 	}
+	options[name] = resolve(options[name]);
 }
 
 for (const formatName of options.format) {
@@ -102,9 +103,14 @@ for (const formatName of options.format) {
 			const file = `${name}.${formatName}`;
 
 			try {
-				const args = getArgs(join(options.output, file), options[name]);
+				const target = join(options.output, file);
+				const args = getArgs(target, options[name]);
 				io.debug('command:', command, ...args);
-				if (!options['dry-run']) io.trackCommand('Creating ' + file, command, ...args);
+				using _ = io.withCWD(options[name]);
+				if (!options['dry-run']) {
+					fs.rmSync(target, { force: true });
+					io.trackCommand('Creating ' + file, command, ...args);
+				}
 			} catch (e) {
 				if (options['keep-going']) continue;
 				throw e;
