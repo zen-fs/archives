@@ -1,8 +1,9 @@
-import { configureSingle, InMemory, CopyOnWrite } from '@zenfs/core';
+import { configureSingle, CopyOnWrite, InMemory } from '@zenfs/core';
 import { readFileSync } from 'node:fs';
-import { Zip } from '../dist/zip/fs.js';
+import { join } from 'node:path';
+import { Zip } from '../../dist/zip/fs.js';
 
-const buf = readFileSync(import.meta.dirname + '/files/core.zip');
+const buf = readFileSync(join(import.meta.dirname, '../files/core.zip'));
 
 await configureSingle({
 	backend: CopyOnWrite,
