@@ -43,10 +43,13 @@ jobs:
               run: npx zenfs-test -pv --common
 
             - name: Unit tests (Zip)
-              run: npx zenfs-test -pvf tests/setup-zip.ts
+              run: npx zenfs-test -pvf tests/setup/zip.ts
 
             - name: Unit tests (Iso)
-              run: npx zenfs-test -pvf tests/setup-iso.ts
+              run: npx zenfs-test -pvf tests/setup/iso.ts
+
+            - name: Unit tests (Tar)
+              run: npx zenfs-test -pvf tests/setup/tar.ts
 
             - name: Report test coverage
               run: npx zenfs-test --report
