@@ -10,7 +10,7 @@ const _isoCommon = (target: string, source: string, vol = '-V') => ['-quiet', vo
 const formats = {
 		zip: {
 			// @todo use built-in `createZipArchiveSync()`, see https://github.com/nodejs/node/pull/64339
-			zip: out => ['-o', '--quiet', '-X', out, '-r', '.'],
+			zip: out => ['-o', '--quiet', out, '-r', '.'],
 		},
 		iso: {
 			genisoimage: _isoCommon,
@@ -19,7 +19,7 @@ const formats = {
 			hdiutil: (out, src) => ['makehybrid', '-quiet', '-iso', ..._isoCommon(out, src, '-default-volume-name')],
 		},
 		tar: {
-			tar(out, src) {
+			tar(out) {
 				const isGNU = execFileSync('tar', ['--version'], { encoding: 'utf8' }).includes('GNU tar');
 
 				return [
