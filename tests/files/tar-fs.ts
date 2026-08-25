@@ -1,10 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { Tar } from '../../src/tar/fs.ts';
 import { configureSingle, fs } from '@zenfs/core';
-import { join } from 'node:path';
-import { parseArgs } from 'node:util';
 import { configure as configureLog, fancy } from 'kerium/log';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { parseArgs } from 'node:util';
 import { gunzipSync } from 'node:zlib';
+import { Tar } from '../../src/tar/fs.ts';
 
 const {
 	values: options,
@@ -21,7 +21,7 @@ const {
 
 configureLog({ level: options.verbose ? 'debug' : 'info', format: fancy({ style: 'ansi', colorize: 'message' }) });
 
-const fileData = readFileSync(join(import.meta.dirname, name));
+const fileData = readFileSync(resolve(import.meta.dirname, name));
 
 const data = options.gzip ? gunzipSync(fileData) : fileData;
 
