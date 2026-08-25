@@ -2,10 +2,11 @@
 
 [ZenFS](https://github.com/zen-fs/core) backends for archive files.
 
-This packages adds a few backends:
+This packages adds some backends that allow you to create _readonly_ file systems:
 
-- `Zip` allows you to create a _readonly_ file system from a zip file.
-- `Iso` allows you to create a _readonly_ file system from a `.iso` file.
+- `Zip` for `.zip` files (PK Zip).
+- `Iso` for `.iso` files (ISO 9660).
+- `Tar` for `.tar` files. The POSIX/USTAR format is the most compatible, but gnu/oldgnu format tar files are also supported.
 
 For more information, see the [API documentation](https://zenfs.dev/archives).
 
@@ -52,7 +53,7 @@ const res = await fetch('http://example.com/image.iso');
 
 await configure({
 	mounts: {
-		'/mnt/iso': { backend: Iso, data: new Uint8Array(await res.arrayBuffer()) },
+		'/mnt/iso': { backend: Iso, data: await res.bytes() },
 	},
 });
 
@@ -61,3 +62,7 @@ console.log(contents);
 ```
 
 The `Iso` implementation uses information from [the OS Dev Wiki](https://wiki.osdev.org/ISO_9660) and [ECMA 119](https://www.ecma-international.org/wp-content/uploads/ECMA-119_4th_edition_june_2019.pdf).
+
+### `Tar`
+
+Same as the `Iso` backend, you pass in the file data as a `Uint8Array`.
