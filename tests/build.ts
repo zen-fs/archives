@@ -38,13 +38,13 @@ const formats = {
 
 const { values: options } = parseArgs({
 	options: {
+		format: { short: 'f', type: 'string', multiple: true, default: formatsNames },
+		incremental: { short: 'i', type: 'boolean', default: false },
+		'keep-going': { short: 'k', type: 'boolean', default: false },
+		'dry-run': { type: 'boolean', default: false },
+		output: { short: 'o', type: 'string', default: join(import.meta.dirname, 'files') },
 		data: { type: 'string', default: join(import.meta.dirname, 'data') },
 		core: { type: 'string', default: join(import.meta.dirname, '../node_modules/@zenfs/core/tests/data') },
-		'keep-going': { short: 'k', type: 'boolean', default: false },
-		incremental: { short: 'i', type: 'boolean', default: false },
-		output: { short: 'o', type: 'string', default: join(import.meta.dirname, 'files') },
-		format: { short: 'f', type: 'string', multiple: true, default: formatsNames },
-		'dry-run': { type: 'boolean', default: false },
 		verbose: { short: 'v', type: 'boolean', default: false },
 		help: { short: 'h', type: 'boolean', default: false },
 	},
@@ -57,15 +57,15 @@ if (options.help) {
 	console.log(`Usage: ${import.meta.filename} [options]
 Options:
     -f, --format <name>  Which format(s) to build for. Can be passed multiple times. Accepted: ${formatsNames.join(', ')}
-    -k, --keep-going     If a file can't be built, keep going
     -i, --incremental    Only build missing files
+    -k, --keep-going     If a file can't be built, keep going
+        --dry-run        Don't actually write the files
     -o, --output <dir>   Path to place built archives
         --data <path>    Path to @zenfs/archives test data directory
         --core <path>    Path to @zenfs/core test data directory
-        --dry-run        Don't actually write the files
     -v, --verbose        Show verbose output
     -h, --help           Show this message
-	`);
+`);
 	process.exit();
 }
 
