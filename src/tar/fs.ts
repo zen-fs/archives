@@ -2,11 +2,11 @@ import type { Backend, SharedConfig, UsageInfo } from '@zenfs/core';
 import { FileSystem, Inode, isDirectory, Readonly, Sync } from '@zenfs/core';
 import { S_IFDIR } from '@zenfs/core/constants';
 import { basename, dirname } from '@zenfs/core/path';
-import * as io from 'ioium';
 import { withErrno } from 'kerium';
 import { pick } from 'utilium';
 import { _caseFold } from '../utils.js';
 import * as tar from './tar.js';
+import { debug, warn } from 'kerium/log';
 
 /**
  * Options for TarFS file system instances.
@@ -39,9 +39,9 @@ export class TarFS extends Readonly(Sync(FileSystem)) {
 			const magic = tar.decodeString(header.magic);
 			const offStr = '0x' + off.toString(16);
 
-			if (magic === tar.oldgnuMagic) io.debug('tarfs:', offStr, 'has oldgnu magic');
+			if (magic === tar.oldgnuMagic) debug(`tarfs: ${offStr} has oldgnu magic`);
 			else if (magic !== tar.magic) {
-				io.debug(`tarfs: skipping ${offStr}, bad magic`);
+				debug(`tarfs: skipping ${offStr}, bad magic`);
 				continue;
 			}
 
@@ -63,18 +63,18 @@ export class TarFS extends Readonly(Sync(FileSystem)) {
 			);
 			if (entry.type == tar.TypeFlag.Dir) this.directories.set(folded, new Set());
 			else if (!entry.size) {
-				io.debug('tarfs: file is empty,', name);
+				debug(`tarfs: file is empty, ${name}`);
 			} else {
 				const content = new Uint8Array(this.data.buffer, header.byteOffset + 512, entry.size);
 				this.files.set(folded, content);
 				const nBlocks = Math.ceil(entry.size / 512);
 				off += nBlocks * 512;
-				io.debug('tarfs: skipping forward', nBlocks, 'blocks');
+				debug(`tarfs: skipping forward ${nBlocks} blocks`);
 			}
 
 			const dir = this.directories.get(dirname(folded));
 			if (dir) dir.add(basename(folded));
-			else io.warn('tarfs: can not add entry to non-existent directory:', name);
+			else warn('tarfs: can not add entry to non-existent directory: ' + name);
 		}
 	}
 
