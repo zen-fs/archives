@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import * as fs from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -8,10 +9,10 @@ const _isoCommon = (target: string, source: string, vol = '-V') => ['-quiet', vo
 
 const formats = {
 		zip: {
+			// @todo use built-in `createZipArchiveSync()`, see https://github.com/nodejs/node/pull/64339
 			zip: (out, src) => ['-o', '--quiet', '-X', out, src],
 		},
 		iso: {
-			// @todo use built-in `createZipArchiveSync()`, see https://github.com/nodejs/node/pull/64339
 			genisoimage: _isoCommon,
 			mkisofs: _isoCommon,
 			xorrisofs: (out, src) => [..._isoCommon(out, src), '--norock'],
