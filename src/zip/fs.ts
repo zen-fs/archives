@@ -160,6 +160,15 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 
 			this.directories.get(dir)!.add(base);
 		}
+
+		/* 	A stored directory entry with no children is never the parent of anything,
+			so neither of the loops above creates a key for it.
+			Without one, `readdir` on it fails with ENODATA instead of returning an empty listing. */
+		for (const [path, entry] of this.files) {
+			if (entry.isDirectory && !this.directories.has(path)) {
+				this.directories.set(path, new Set());
+			}
+		}
 	}
 
 	public constructor(
