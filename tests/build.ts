@@ -4,13 +4,19 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import * as io from 'ioium/node';
 import { execFileSync } from 'node:child_process';
+import { zipFiles } from 'node:zlib';
+import { pipeline } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
+
+declare module 'node:zlib' {
+	function zipFiles(files: Iterable<[string, string]>, options?: object): Readable;
+}
 
 const _isoCommon = (target: string, source: string, vol = '-V') => ['-quiet', vol, 'CDROM', '-o', target, source];
 
 const formats = {
-		zip: {
-			// @todo use built-in `createZipArchiveSync()`, see https://github.com/nodejs/node/pull/64339
-			zip: out => ['-o', '--quiet', out, '-r', '.'],
+		zip(this: void, target, source) {
+			return pipeline(zipFiles(fs.readdirSync(source, { recursive: true, encoding: 'utf8' }).map(file => [join(source, file), file])), fs.createWriteStream(target));
 		},
 		iso: {
 			genisoimage: _isoCommon,
@@ -33,7 +39,7 @@ const formats = {
 				];
 			},
 		},
-	} satisfies Record<string, Record<string, (targetPath: string, sourcedir: string) => string[]>>,
+	} satisfies Record<string, Record<string, (targetPath: string, sourcedir: string) => string[]> | ((targetPath: string, sourcedir: string) => void | Promise<void>)>,
 	formatsNames = Object.keys(formats);
 
 const { values: options } = parseArgs({
@@ -95,6 +101,22 @@ for (const formatName of options.format) {
 	}
 
 	if (!formatFilesNeeded.length) continue;
+
+	if (typeof format === 'function') {
+		for (const name of formatFilesNeeded) {
+			const file = `${name}.${formatName}`;
+
+			try {
+				const target = join(options.output, file);
+
+				if (!options['dry-run']) await io.track('Creating ' + file, () => format(target, options[name]));
+			} catch (e) {
+				if (options['keep-going']) continue;
+				throw e;
+			}
+		}
+		continue;
+	}
 
 	for (const [command, getArgs] of Object.entries(format)) {
 		if (!io.trackCommand({ text: 'Checking for ' + command, ignoreCode: true }, 'command', '-v', command)) continue;
