@@ -105,6 +105,7 @@ await suite('Custom data source', () => {
 			backend: Zip,
 			data: {
 				size,
+				isShared: false,
 				get(offset, length) {
 					const data = new Uint8Array(length);
 					const read = readSync(handle.fd, data, { position: offset, length });
@@ -118,7 +119,7 @@ await suite('Custom data source', () => {
 	_runTests();
 });
 
-await suite('ZIP stored empty directories', () => {
+await suite('ZIP stored empty directories #22', () => {
 	test('Configure', async () => {
 		const empty = new Uint8Array(0);
 		const data = zipSync({
