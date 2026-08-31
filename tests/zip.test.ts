@@ -2,10 +2,12 @@ import { fromStream, Zip } from '@zenfs/archives';
 import { configureSingle, fs } from '@zenfs/core';
 // @ts-expect-error 7016
 import { setupLogs } from '@zenfs/core/tests/logs.js';
+import { zipSync } from 'fflate';
 import assert from 'node:assert/strict';
 import { fstatSync, readFileSync, readSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { suite, test } from 'node:test';
+import { encodeUTF8 } from 'utilium';
 
 setupLogs();
 
@@ -114,4 +116,46 @@ await suite('Custom data source', () => {
 	});
 
 	_runTests();
+});
+
+await suite('ZIP stored empty directories', () => {
+	test('Configure', async () => {
+		const empty = new Uint8Array(0);
+		const data = zipSync({
+			'keep.txt': encodeUTF8('hi'),
+			'empty/': empty,
+			'nested/': empty,
+			'nested/deep/': empty,
+			'nested/omg.txt': encodeUTF8('This is a nested file!'),
+		});
+		await configureSingle({ backend: Zip, data });
+	});
+
+	test('readdir /', () => {
+		assert.deepEqual(fs.readdirSync('/').sort(), ['empty', 'keep.txt', 'nested']);
+	});
+
+	test('stat /empty', () => {
+		assert.ok(fs.statSync('/empty').isDirectory());
+	});
+
+	test('readdirSync /empty', () => {
+		assert.deepEqual(fs.readdirSync('/empty'), []);
+	});
+
+	test('readdir /empty', async () => {
+		assert.deepEqual(await fs.promises.readdir('/empty'), []);
+	});
+
+	test('readdir /nested', () => {
+		assert.deepEqual(fs.readdirSync('/nested').sort(), ['deep', 'omg.txt']);
+	});
+
+	test('readdirSync /nested/deep', () => {
+		assert.deepEqual(fs.readdirSync('/nested/deep'), []);
+	});
+
+	test('read /empty throws EISDIR', () => {
+		assert.throws(() => fs.readFileSync('/empty'), { code: 'EISDIR' });
+	});
 });
