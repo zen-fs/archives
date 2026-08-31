@@ -129,17 +129,18 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 			if (cd.name.startsWith('/')) {
 				throw withErrno('EPERM', 'Unexpectedly encountered an absolute path in a zip file.');
 			}
-			// Strip the trailing '/' if it exists
-			const name = cd.name.endsWith('/') ? cd.name.slice(0, -1) : cd.name;
-			this.files.set('/' + _caseFold(this, name), cd);
+			const path = '/' + _caseFold(this, cd.name.endsWith('/') ? cd.name.slice(0, -1) : cd.name);
+			this.files.set(path, cd);
+
+			if (cd.isDirectory) this.directories.set(path, new Set());
+
 			ptr += cd.$size;
 		}
 
 		// Parse directory entries
 		for (const entry of this.files.keys()) {
-			let { dir, base } = parse(entry);
+			const { dir, base } = parse(entry);
 
-			dir = _caseFold(this, dir);
 			if (!this.directories.has(dir)) {
 				this.directories.set(dir, new Set());
 			}
@@ -149,9 +150,8 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 
 		// Add subdirectories to their parent's entries
 		for (const entry of this.directories.keys()) {
-			let { dir, base } = parse(entry);
+			const { dir, base } = parse(entry);
 
-			dir = _caseFold(this, dir);
 			if (base == '') continue;
 
 			if (!this.directories.has(dir)) {
@@ -159,15 +159,6 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 			}
 
 			this.directories.get(dir)!.add(base);
-		}
-
-		/* 	A stored directory entry with no children is never the parent of anything,
-			so neither of the loops above creates a key for it.
-			Without one, `readdir` on it fails with ENODATA instead of returning an empty listing. */
-		for (const [path, entry] of this.files) {
-			if (entry.isDirectory && !this.directories.has(path)) {
-				this.directories.set(path, new Set());
-			}
 		}
 	}
 
