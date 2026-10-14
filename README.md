@@ -14,9 +14,6 @@ Please read the ZenFS core documentation!
 
 ## Installation
 
-> [!IMPORTANT]
-> This project is licensed under the LGPL (v3+).
-
 ```sh
 npm install @zenfs/archives
 ```
@@ -66,3 +63,8 @@ The `Iso` implementation uses information from [the OS Dev Wiki](https://wiki.os
 ### `Tar`
 
 Same as the `Iso` backend, you pass in the file data as a `Uint8Array`.
+
+## License
+
+[@zenfs/archives](https://github.com/zen-fs/archives) is licensed under the [LGPL 3.0 or later](https://www.gnu.org/licenses/lgpl-3.0.html) and [COPYING.md](https://github.com/zen-fs/archives/blob/main/COPYING.md).
+Copyright © James Prevett and other ZenFS contributors.
