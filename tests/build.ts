@@ -44,7 +44,7 @@ const { values: options } = parseArgs({
 		'dry-run': { type: 'boolean', default: false },
 		output: { short: 'o', type: 'string', default: join(import.meta.dirname, 'files') },
 		data: { type: 'string', default: join(import.meta.dirname, 'data') },
-		core: { type: 'string', default: join(import.meta.dirname, '../node_modules/@zenfs/core/tests/data') },
+		core: { type: 'string', default: join(import.meta.dirname, '../node_modules/@zenfs/devel/tests/data') },
 		verbose: { short: 'v', type: 'boolean', default: false },
 		help: { short: 'h', type: 'boolean', default: false },
 	},

@@ -6,8 +6,7 @@ import { suite, test } from 'node:test';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { Iso } from '../dist/iso/fs.js';
-// @ts-expect-error 7016
-import { setupLogs } from '@zenfs/core/tests/logs.js';
+import { setupLogs } from '@zenfs/devel/tests/logs';
 
 setupLogs();
 

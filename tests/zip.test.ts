@@ -1,7 +1,6 @@
 import { fromStream, Zip } from '@zenfs/archives';
 import { configureSingle, fs } from '@zenfs/core';
-// @ts-expect-error 7016
-import { setupLogs } from '@zenfs/core/tests/logs.js';
+import { setupLogs } from '@zenfs/devel/tests/logs';
 import { zipSync } from 'fflate';
 import assert from 'node:assert/strict';
 import { fstatSync, readFileSync, readSync } from 'node:fs';

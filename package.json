@@ -29,7 +29,8 @@
 	},
 	"exports": {
 		".": "./dist/index.js",
-		"./*": "./dist/*"
+		"./*.js": "./dist/*.js",
+		"./*": "./dist/*.js"
 	},
 	"files": [
 		"dist",
@@ -50,21 +51,17 @@
 		"prepublishOnly": "npm run build"
 	},
 	"devDependencies": {
-		"@eslint/js": "^10.0.1",
 		"@types/node": "^26.0.0",
-		"c8": "^12.0.0",
+		"@zenfs/devel": "^0.1.0",
 		"eslint": "^10.1.0",
-		"globals": "^17.11.0",
 		"ioium": "^1.8.0",
 		"prettier": "^3.2.5",
-		"tsx": "^4.19.1",
 		"typedoc": "^0.28.18",
 		"typescript": "^6.0.0",
-		"typescript-eslint": "^8.58.0",
 		"zbench-js": "^0.2.0"
 	},
 	"peerDependencies": {
-		"@zenfs/core": "^2.6.0",
+		"@zenfs/core": "^2.8.3",
 		"kerium": "^1.4.2",
 		"memium": "^1.0.0",
 		"utilium": "^3.0.0"
