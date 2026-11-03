@@ -52,7 +52,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "^26.0.0",
-		"@zenfs/devel": "^0.1.0",
+		"@zenfs/devel": "^1.0.0",
 		"eslint": "^10.1.0",
 		"ioium": "^1.8.0",
 		"prettier": "^3.2.5",
