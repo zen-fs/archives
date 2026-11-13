@@ -33,8 +33,7 @@
 		"./*": "./dist/*.js"
 	},
 	"files": [
-		"dist",
-		"license.md"
+		"dist"
 	],
 	"publishConfig": {
 		"access": "public",
